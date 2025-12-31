@@ -25,7 +25,8 @@ from datetime import datetime, timedelta
 
 
 # Governance Rules
-MAX_SKILL_LINES = 400  # Lowered from 500 to ensure 400-line safety buffer
+MAX_SKILL_LINES = 500  # Hard limit from CLAUDE.md governance framework
+RECOMMENDED_SKILL_LINES = 400  # Recommended limit to ensure safety buffer
 MIN_DESCRIPTION_LENGTH = 40
 REQUIRED_DESCRIPTION_PHRASES = ["Use when", "use when"]
 REQUIRED_SECTIONS = [
@@ -250,10 +251,15 @@ def validate_skill_file(file_path: Path) -> ValidationResult:
             f"   -> ACTION: Extract logic to a 'Zero-Context Script' in scripts/\n"
             f"   -> OR: Move detailed documentation to reference.md"
         )
-    elif line_count > MAX_SKILL_LINES * 0.8:
+    elif line_count > RECOMMENDED_SKILL_LINES:
         result.add_warning(
-            f"Approaching context limit: {line_count}/{MAX_SKILL_LINES} lines. "
+            f"Approaching context limit: {line_count}/{MAX_SKILL_LINES} lines (recommended: {RECOMMENDED_SKILL_LINES}). "
             "Consider splitting or moving details to reference.md to preserve 'Instruction Budget'"
+        )
+    elif line_count > RECOMMENDED_SKILL_LINES * 0.8:
+        result.add_info(
+            f"Skill size is {line_count} lines (recommended max: {RECOMMENDED_SKILL_LINES}). "
+            "Still within budget, but monitor growth."
         )
 
     # 5. Check for deterministic logic that should be in scripts
@@ -330,12 +336,12 @@ def print_statistics(results: List[ValidationResult]):
             pass
 
     avg_lines = total_lines / total if total > 0 else 0
-    print(f"Average skill size: {avg_lines:.0f} lines (max {MAX_SKILL_LINES})")
+    print(f"Average skill size: {avg_lines:.0f} lines (recommended: {RECOMMENDED_SKILL_LINES}, max: {MAX_SKILL_LINES})")
 
     # Context efficiency
     if avg_lines > 0:
-        efficiency = (1 - (avg_lines / MAX_SKILL_LINES)) * 100
-        print(f"Context efficiency: {efficiency:.1f}% headroom remaining")
+        efficiency = (1 - (avg_lines / RECOMMENDED_SKILL_LINES)) * 100
+        print(f"Context efficiency: {efficiency:.1f}% headroom remaining (against recommended limit)")
 
     print("=" * 60)
 
