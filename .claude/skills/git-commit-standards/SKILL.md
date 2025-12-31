@@ -1,8 +1,10 @@
 ---
 name: git-commit-standards
 description: "Use when creating git commits or pull requests. Enforces conventional commit format and atomic change principles. Verified on Git 2.30+"
+author: "Claude Code Learning Flywheel Team"
 allowed-tools: ["Bash", "Read", "Grep"]
 version: 1.0.0
+last_verified: "2025-01-01"
 tags: ["git", "workflow", "team-standards"]
 related-skills: []
 ---
