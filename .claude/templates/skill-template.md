@@ -1,8 +1,10 @@
 ---
 name: [verb]-[noun]-[context]
 description: "Specific trigger description. Use when [Action] on [Component]. Verified on [Tech Stack/Version]."
+author: "[Your Name or Team]"  # Optional: For ownership and contact
 allowed-tools: []  # Optional: ["Read", "Write", "Bash", "Glob", "Grep"]
 version: 1.0.0
+last_verified: "YYYY-MM-DD"  # Date this skill was last verified to work
 tags: []  # Optional: ["database", "deployment", "testing"]
 related-skills: []  # Optional: ["other-skill-name"]
 ---

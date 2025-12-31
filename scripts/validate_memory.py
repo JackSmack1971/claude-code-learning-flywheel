@@ -167,6 +167,30 @@ def validate_skill_file(file_path: Path) -> ValidationResult:
     if 'version' not in metadata:
         result.add_warning("Frontmatter missing recommended field: 'version'")
 
+    if 'last_verified' not in metadata:
+        result.add_warning("Frontmatter missing recommended field: 'last_verified' (tracks skill freshness)")
+    else:
+        # Validate date format (YYYY-MM-DD)
+        last_verified = metadata['last_verified']
+        date_pattern = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+        if not date_pattern.match(str(last_verified)):
+            result.add_warning(
+                f"Invalid 'last_verified' format: '{last_verified}'. Use YYYY-MM-DD format"
+            )
+
+    if 'author' not in metadata:
+        result.add_warning("Frontmatter missing recommended field: 'author' (for ownership tracking)")
+
+    if 'tags' in metadata:
+        tags = metadata['tags']
+        if isinstance(tags, list) and len(tags) == 0:
+            result.add_info("Consider adding tags for better skill organization and discovery")
+
+    if 'allowed-tools' in metadata:
+        allowed_tools = metadata['allowed-tools']
+        if isinstance(allowed_tools, list) and len(allowed_tools) == 0:
+            result.add_info("Consider specifying allowed-tools to restrict skill tool usage")
+
     # 3. Validate Negative Knowledge section
     has_negative_knowledge = any(
         section in body for section in REQUIRED_SECTIONS

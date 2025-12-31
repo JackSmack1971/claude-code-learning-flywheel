@@ -163,7 +163,43 @@ Before running this skill, ensure:
   - ✅ `validate_skill_format.py`
   - ✅ `check_api_health.py`
 
-### 5. Tiered Knowledge Layers
+### 5. Skill Metadata Fields
+
+All skills include YAML frontmatter with governance metadata:
+
+**Required Fields:**
+- `name`: Kebab-case identifier (e.g., `deploy-lambda-terraform`)
+- `description`: Must include "Use when" trigger conditions
+- `version`: Semantic version tracking skill evolution (e.g., `1.0.0`)
+- `last_verified`: Date skill was last tested (YYYY-MM-DD format)
+
+**Recommended Fields:**
+- `author`: Owner/team for questions and maintenance
+- `tags`: Categories for discovery (e.g., `["database", "testing"]`)
+- `allowed-tools`: Tool restrictions for semantic differentiation (e.g., `["Bash", "Read"]`)
+- `related-skills`: Dependencies or complementary skills
+
+**Example:**
+```yaml
+---
+name: deploy-microservice-k8s
+description: "Use when deploying containerized services to Kubernetes. Verified on k8s 1.28+"
+author: "DevOps Team"
+version: 2.1.0
+last_verified: "2025-01-15"
+tags: ["kubernetes", "deployment", "production"]
+allowed-tools: ["Bash", "Read", "Grep"]
+related-skills: ["validate-k8s-manifests", "rollback-deployment"]
+---
+```
+
+**Governance Benefits:**
+- `version` + `last_verified`: Identify stale skills needing updates
+- `author`: Clear ownership for skill maintenance
+- `tags`: Better organization and discovery
+- `allowed-tools`: Control tool access during model invocation
+
+### 6. Tiered Knowledge Layers
 
 ```
 Personal (.claude/skills/)     → Your individual learnings
