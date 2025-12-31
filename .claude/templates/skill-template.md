@@ -107,17 +107,40 @@ python scripts/check_prerequisites.py
 
 ### Step 3: [Verification Phase]
 
-**Description:** [Final checks]
+**Description:** [Final checks to ensure changes are correct and don't introduce errors]
 
 ```bash
 # Run comprehensive test
 [command here]
 ```
 
+**LSP Diagnostics Check:**
+
+Run LSP diagnostics to ensure no new errors were introduced:
+
+```bash
+# Using Claude Code LSP integration (cclsp)
+# Check diagnostics for modified files
+get_diagnostics file_path="path/to/modified/file.py"
+
+# Or use language-specific tools:
+# Python: pylint, mypy, pyright
+# JavaScript/TypeScript: eslint, tsc
+# Go: gopls
+```
+
+**Expected Output:**
+- ✅ Zero new LSP errors
+- ✅ Zero new LSP warnings (or documented as acceptable)
+- ✅ No regression in existing code quality
+
+**Note:** LSP provides "ground truth" for code understanding. If LSP shows errors after your changes, the procedure needs refinement even if the code "works."
+
 **Success Criteria:**
 - [ ] [Observable outcome 1]
 - [ ] [Observable outcome 2]
 - [ ] [Observable outcome 3]
+- [ ] **LSP diagnostics show no new errors or warnings**
 
 ---
 
