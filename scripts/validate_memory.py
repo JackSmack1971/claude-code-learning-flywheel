@@ -24,7 +24,7 @@ from typing import List, Tuple, Dict
 
 
 # Governance Rules
-MAX_SKILL_LINES = 500
+MAX_SKILL_LINES = 400  # Lowered from 500 to ensure 400-line safety buffer
 MIN_DESCRIPTION_LENGTH = 40
 REQUIRED_DESCRIPTION_PHRASES = ["Use when", "use when"]
 REQUIRED_SECTIONS = [
@@ -32,6 +32,7 @@ REQUIRED_SECTIONS = [
     "Failed Attempts",
 ]
 VALID_NAME_PATTERN = re.compile(r'^[a-z0-9]+(-[a-z0-9]+)*$')
+DETERMINISTIC_LOGIC_THRESHOLD = 50  # Lines of if/else or lists before warning
 
 
 class ValidationResult:
@@ -186,10 +187,19 @@ def validate_skill_file(file_path: Path) -> ValidationResult:
         if isinstance(tags, list) and len(tags) == 0:
             result.add_info("Consider adding tags for better skill organization and discovery")
 
+    # Check for enterprise skills (in plugins/company-* directories) - allowed-tools is MANDATORY
+    is_enterprise_skill = 'plugins/company-' in str(file_path) or 'plugins/enterprise-' in str(file_path)
+
     if 'allowed-tools' in metadata:
         allowed_tools = metadata['allowed-tools']
         if isinstance(allowed_tools, list) and len(allowed_tools) == 0:
-            result.add_info("Consider specifying allowed-tools to restrict skill tool usage")
+            if is_enterprise_skill:
+                result.add_error("Enterprise skills MUST specify 'allowed-tools' for governance and security")
+            else:
+                result.add_info("Consider specifying allowed-tools to restrict skill tool usage")
+    else:
+        if is_enterprise_skill:
+            result.add_error("Enterprise skills MUST include 'allowed-tools' field in frontmatter")
 
     # 3. Validate Negative Knowledge section
     has_negative_knowledge = any(
@@ -230,11 +240,27 @@ def validate_skill_file(file_path: Path) -> ValidationResult:
             "Consider splitting or moving details to reference.md"
         )
 
-    # 5. Check for common anti-patterns
+    # 5. Check for deterministic logic that should be in scripts
+    # Detect if/else patterns and list declarations
+    if_else_pattern = re.compile(r'^\s*(if|elif|else|switch|case)\s', re.MULTILINE)
+    list_pattern = re.compile(r'^\s*[-*]\s+\w+:\s*["\']', re.MULTILINE)  # Detect config-like lists
+
+    if_else_matches = if_else_pattern.findall(body)
+    list_matches = list_pattern.findall(body)
+
+    deterministic_lines = len(if_else_matches) + (len(list_matches) // 2)  # Rough estimate
+
+    if deterministic_lines > DETERMINISTIC_LOGIC_THRESHOLD:
+        result.add_warning(
+            f"Detected {deterministic_lines} lines of deterministic logic (if/else, hardcoded lists). "
+            "Move complex logic to scripts/ for zero-context execution"
+        )
+
+    # 6. Check for common anti-patterns
     if 'TODO' in body or 'FIXME' in body:
         result.add_warning("Contains TODO/FIXME markers - complete before committing")
 
-    # 6. Validate structure (should have numbered sections)
+    # 7. Validate structure (should have numbered sections)
     section_pattern = re.compile(r'^#+\s+\d+\.\s+', re.MULTILINE)
     sections = section_pattern.findall(body)
     if len(sections) < 3:

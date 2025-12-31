@@ -49,25 +49,64 @@ Found: .claude/skills/deploy-microservice-k8s/SKILL.md
 **Purpose:** Extract learnings and update the skill registry.
 
 **Procedure:**
-1. Analyze the conversation history from task start to completion.
-2. Identify:
+1. **Environment Snapshot (Auto-collect):**
+   * Automatically capture current environment state before analysis:
+     ```bash
+     # Run version checks for common tools (adjust based on your stack)
+     python --version 2>&1 || echo "Python: not installed"
+     node --version 2>&1 || echo "Node.js: not installed"
+     git --version 2>&1 || echo "Git: not installed"
+     docker --version 2>&1 || echo "Docker: not installed"
+     # Add package versions if relevant to the task
+     pip freeze | grep -i <package> || npm list <package> --depth=0
+     ```
+   * Store these in the skill's `Verified Working On` field
+
+2. **Analysis Phase:**
+   Analyze the conversation history from task start to completion and identify:
    * The original goal
    * The final working solution (code snippets, commands, config)
    * **The failures** (errors encountered, wrong approaches tried)
    * Root causes of failures
-3. **Action Decision Tree:**
+
+3. **Multi-Claude Verification Loop** (Critical for reducing 93% confirmation bias):
+
+   **Step A: Draft**
+   - Extract insights and draft the `SKILL.md` content
+   - Include all sections: Context, Negative Knowledge, Verified Procedure
+   - Populate with concrete examples from the session
+
+   **Step B: Critique** (Switch to Architect Mode)
+   - **Assume the role of a Lead Architect reviewing this skill**
+   - Review the drafted skill for:
+     * ❌ **Over-generalized advice**: Are instructions specific and actionable?
+     * ❌ **Lack of negative knowledge**: Are failures documented with root causes?
+     * ❌ **Vague triggers**: Does the description clearly state "Use when [specific condition]"?
+     * ❌ **Missing environment details**: Are version numbers and dependencies specified?
+     * ❌ **Unverified procedures**: Can someone follow these steps without context?
+   - Document critique points as structured feedback
+
+   **Step C: Synthesis** (Return to Implementation Mode)
+   - Refine the skill based on the critique
+   - Address each critique point explicitly
+   - Ensure the final skill passes all governance checks
+   - Validate against the template requirements
+
+4. **Action Decision Tree:**
 
    **If a relevant skill already exists:**
    - Update the "Negative Knowledge" table with new failure modes
    - Refine the "Verified Procedure" section with improvements
    - Update version number in frontmatter
+   - Update `last_verified` field with current date
 
    **If this is a new capability:**
    - Create a new directory: `.claude/skills/[verb-noun-context]/`
    - Generate `SKILL.md` using the standard template
    - Add any supporting scripts to `scripts/` subdirectory
+   - Inject environment snapshot into `Verified Working On` field
 
-4. **Git Operations:**
+5. **Git Operations:**
    * Create a branch: `memory/update-[topic]`
    * Commit the new/updated `SKILL.md` with message format:
      ```
@@ -80,6 +119,7 @@ Found: .claude/skills/deploy-microservice-k8s/SKILL.md
      - What failed and why
      - What ultimately worked
      - Edge cases discovered
+     - Environment where verified (auto-injected from snapshot)
 
 **Example Output:**
 ```
@@ -136,10 +176,11 @@ Before running this skill, ensure:
   - How to avoid it
 
 ### 2. Context Budget Management
-- SKILL.md files limited to 500 lines (enforced by validator)
+- SKILL.md files limited to 400 lines (enforced by validator - provides 400-line safety buffer)
 - Detailed documentation goes in `reference.md` (loaded on-demand)
 - API schemas, examples, edge cases go in separate files
 - Use "See `reference.md` for details" pattern
+- Deterministic logic (>50 lines of if/else or lists) must move to `scripts/` directory
 
 ### 3. Zero-Context Scripts
 - Complex validation logic (>50 lines) must move to `scripts/`
@@ -227,9 +268,10 @@ fi
 
 ### Pull Request Checks
 Required status checks:
-- `memory-validation`: Ensures skills follow format
-- `no-context-bloat`: Checks file sizes
-- `negative-knowledge-present`: Validates failure documentation
+- `memory-validation`: Ensures skills follow format (`python scripts/validate_memory.py --strict`)
+- `semantic-conflict-detection`: Prevents skill collision (`python scripts/detect_conflicts.py --strict`)
+- `no-context-bloat`: Checks file sizes (enforced by validator - max 400 lines)
+- `negative-knowledge-present`: Validates failure documentation (enforced by validator)
 
 ---
 
