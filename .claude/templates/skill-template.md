@@ -33,15 +33,17 @@ Brief 2-3 sentence description of the architectural context where this skill app
 
 ## 2. Negative Knowledge (Read First)
 
-*History of failure is more valuable than instructions. Check this BEFORE executing the procedure.*
+> **CRITICAL:** Check this section first. If your plan matches a failed attempt, ABORT and try the verified alternative.
+>
+> *History of failure is more valuable than instructions. This prevents "Groundhog Day loops" where the same mistake is repeated.*
 
 ### Failed Attempts Table
 
-| # | Attempted Strategy | Error/Symptom | Root Cause | Fix/Prevention |
-|---|-------------------|---------------|------------|----------------|
-| 1 | [e.g., Used semantic search for codebase] | [OOM error with large repos] | [Vector DB overhead >2GB RAM] | [Use Regex Grep + file patterns instead] |
-| 2 | [e.g., Installed package globally] | [Version conflict with other projects] | [Global npm pollutes PATH] | [Use project-local install with npx] |
-| 3 | [Example placeholder - delete after adding real failures] | | | |
+| Attempted Approach | Why It Failed | Error Signature | Verified Alternative |
+|:-------------------|:--------------|:----------------|:---------------------|
+| [e.g., Using Regex for HTML parsing] | [Fragile, missed nested tags] | [See test_case_04.py] | [Use BeautifulSoup4 or lxml] |
+| [e.g., Installing packages globally] | [Version conflicts with other projects] | [ModuleNotFoundError in venv] | [Use project-local install with venv] |
+| [Example placeholder - delete after adding real failures] | | | |
 
 ### Common Pitfalls
 

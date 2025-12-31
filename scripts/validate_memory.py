@@ -21,6 +21,7 @@ import re
 import argparse
 from pathlib import Path
 from typing import List, Tuple, Dict
+from datetime import datetime, timedelta
 
 
 # Governance Rules
@@ -33,6 +34,7 @@ REQUIRED_SECTIONS = [
 ]
 VALID_NAME_PATTERN = re.compile(r'^[a-z0-9]+(-[a-z0-9]+)*$')
 DETERMINISTIC_LOGIC_THRESHOLD = 50  # Lines of if/else or lists before warning
+SKILL_FRESHNESS_DAYS = 180  # Skills not verified in 6 months are flagged as stale
 
 
 class ValidationResult:
@@ -178,6 +180,18 @@ def validate_skill_file(file_path: Path) -> ValidationResult:
             result.add_warning(
                 f"Invalid 'last_verified' format: '{last_verified}'. Use YYYY-MM-DD format"
             )
+        else:
+            # Check for staleness (Context Rot)
+            try:
+                verified_date = datetime.strptime(str(last_verified), '%Y-%m-%d')
+                days_since_verified = (datetime.now() - verified_date).days
+                if days_since_verified > SKILL_FRESHNESS_DAYS:
+                    result.add_warning(
+                        f"⏰ STALE: Last verified {days_since_verified} days ago (>{SKILL_FRESHNESS_DAYS} days). "
+                        "Verify skill still works or archive it to prevent 'Context Rot'"
+                    )
+            except ValueError:
+                pass  # Date format already checked above
 
     if 'author' not in metadata:
         result.add_warning("Frontmatter missing recommended field: 'author' (for ownership tracking)")
@@ -231,13 +245,15 @@ def validate_skill_file(file_path: Path) -> ValidationResult:
     line_count = len(body.split('\n'))
     if line_count > MAX_SKILL_LINES:
         result.add_error(
-            f"Exceeds context budget: {line_count} lines (max {MAX_SKILL_LINES}). "
-            "Move detailed docs to 'reference.md'"
+            f"❌ FAIL: Exceeds token budget: {line_count} lines (max {MAX_SKILL_LINES}). "
+            f"Skills > {MAX_SKILL_LINES} lines degrade model performance.\n"
+            f"   -> ACTION: Extract logic to a 'Zero-Context Script' in scripts/\n"
+            f"   -> OR: Move detailed documentation to reference.md"
         )
     elif line_count > MAX_SKILL_LINES * 0.8:
         result.add_warning(
             f"Approaching context limit: {line_count}/{MAX_SKILL_LINES} lines. "
-            "Consider splitting or moving details to reference.md"
+            "Consider splitting or moving details to reference.md to preserve 'Instruction Budget'"
         )
 
     # 5. Check for deterministic logic that should be in scripts

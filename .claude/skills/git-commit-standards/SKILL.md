@@ -62,6 +62,9 @@ This skill defines the team's git commit and pull request standards, ensuring co
 
 ## 3. Verified Procedure
 
+> **IMPORTANT:** This skill is a "Tool Wrapper" - DO NOT analyze commit message format yourself.
+> Use the deterministic validation script for accuracy and speed.
+
 ### Prerequisites Check
 
 ```bash
@@ -135,10 +138,12 @@ EOF
 
 **Validation:**
 ```bash
-# Check commit message format
-git log -1 --pretty=format:%s
+# DO NOT validate commit message text manually
+# Use the deterministic script instead:
+python scripts/validate_commit_msg.py HEAD
 
-# Expected: Matches pattern "type(scope): description"
+# Expected output: "✅ Commit message follows conventional format"
+# If errors returned, fix them based ONLY on script output
 ```
 
 ### Step 3: Verify Before Push
