@@ -1,0 +1,159 @@
+name: Validate Learning Flywheel
+
+on:
+  push:
+    branches: [ main, master, develop, 'claude/**' ]
+    paths:
+      - '.claude/skills/**'
+      - 'plugins/**/skills/**'
+      - 'scripts/validate_memory.py'
+  pull_request:
+    branches: [ main, master, develop ]
+    paths:
+      - '.claude/skills/**'
+      - 'plugins/**/skills/**'
+      - 'scripts/validate_memory.py'
+
+jobs:
+  validate-skills:
+    name: Validate SKILL.md Files
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run skill validator
+        run: |
+          python scripts/validate_memory.py --strict
+
+      - name: Check for skills
+        id: check_skills
+        run: |
+          SKILL_COUNT=$(find .claude/skills -name "SKILL.md" 2>/dev/null | wc -l)
+          echo "skill_count=$SKILL_COUNT" >> $GITHUB_OUTPUT
+          echo "Found $SKILL_COUNT skills"
+
+      - name: Comment on PR (if applicable)
+        if: github.event_name == 'pull_request' && steps.check_skills.outputs.skill_count > 0
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const skillCount = '${{ steps.check_skills.outputs.skill_count }}';
+            const comment = `### 🧠 Learning Flywheel Report
+
+            ✅ All skills validated successfully!
+
+            **Skills in repository:** ${skillCount}
+
+            Keep building that institutional memory! 🚀`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+  check-negative-knowledge:
+    name: Verify Negative Knowledge Documentation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for failure documentation
+        run: |
+          SKILLS=$(find .claude/skills -name "SKILL.md" 2>/dev/null)
+
+          if [ -z "$SKILLS" ]; then
+            echo "No skills found - skipping negative knowledge check"
+            exit 0
+          fi
+
+          MISSING_NEG_KNOWLEDGE=0
+
+          for skill in $SKILLS; do
+            if ! grep -qi "negative knowledge\|failed attempts" "$skill"; then
+              echo "⚠️  Missing Negative Knowledge: $skill"
+              MISSING_NEG_KNOWLEDGE=$((MISSING_NEG_KNOWLEDGE + 1))
+            fi
+          done
+
+          if [ $MISSING_NEG_KNOWLEDGE -gt 0 ]; then
+            echo "❌ $MISSING_NEG_KNOWLEDGE skill(s) missing Negative Knowledge documentation"
+            echo "Add 'Negative Knowledge' or 'Failed Attempts' section to document learnings"
+            exit 1
+          fi
+
+          echo "✅ All skills document negative knowledge"
+
+  context-budget-check:
+    name: Check Context Budget
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check file sizes
+        run: |
+          MAX_LINES=500
+          OVERSIZED=0
+
+          SKILLS=$(find .claude/skills -name "SKILL.md" 2>/dev/null)
+
+          if [ -z "$SKILLS" ]; then
+            echo "No skills found - skipping context budget check"
+            exit 0
+          fi
+
+          for skill in $SKILLS; do
+            LINES=$(wc -l < "$skill")
+            if [ $LINES -gt $MAX_LINES ]; then
+              echo "⚠️  Exceeds context budget ($LINES/$MAX_LINES lines): $skill"
+              OVERSIZED=$((OVERSIZED + 1))
+            fi
+          done
+
+          if [ $OVERSIZED -gt 0 ]; then
+            echo "❌ $OVERSIZED skill(s) exceed context budget"
+            echo "Move detailed documentation to reference.md files"
+            exit 1
+          fi
+
+          echo "✅ All skills within context budget ($MAX_LINES lines)"
+
+  skill-statistics:
+    name: Generate Skill Statistics
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for statistics
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Generate statistics
+        run: |
+          python scripts/validate_memory.py --stats
+
+      - name: Upload statistics
+        uses: actions/upload-artifact@v4
+        with:
+          name: skill-statistics
+          path: |
+            .claude/skills/**/*.md
+          retention-days: 30

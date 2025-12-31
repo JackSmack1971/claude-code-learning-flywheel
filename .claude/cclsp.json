@@ -1,0 +1,107 @@
+{
+  "version": "1.0.0",
+  "name": "claude-code-learning-flywheel",
+  "description": "Language-agnostic architectural scaffold for Claude Code Learning Flywheel",
+
+  "skills": {
+    "autoload": true,
+    "directories": [
+      ".claude/skills",
+      "plugins/*/skills"
+    ],
+    "discovery": {
+      "pattern": "**/SKILL.md",
+      "metadata_required": ["name", "description"],
+      "validation_script": "scripts/validate_memory.py"
+    }
+  },
+
+  "agents": {
+    "directory": ".claude/agents",
+    "enabled": true
+  },
+
+  "plugins": {
+    "directory": "plugins",
+    "enabled": true,
+    "load_order": [
+      "company-standards",
+      "team-playbook"
+    ]
+  },
+
+  "memory": {
+    "retrospective": {
+      "enabled": true,
+      "auto_trigger": false,
+      "branch_prefix": "memory/update-",
+      "commit_format": "memory: {action} {skill-name}\n\nLearned: {insight}"
+    },
+    "advise": {
+      "enabled": true,
+      "scan_on_task_start": true,
+      "match_strategy": "description-keywords"
+    }
+  },
+
+  "governance": {
+    "validation": {
+      "pre_commit": true,
+      "pre_push": false,
+      "ci_required": true
+    },
+    "rules": {
+      "max_skill_lines": 500,
+      "require_negative_knowledge": true,
+      "require_description_triggers": true,
+      "enforce_naming_convention": true
+    }
+  },
+
+  "optimization": {
+    "progressive_disclosure": {
+      "enabled": true,
+      "reference_files": ["reference.md", "examples.md", "troubleshooting.md"],
+      "load_strategy": "on-demand"
+    },
+    "zero_context_scripts": {
+      "enabled": true,
+      "script_directories": [
+        ".claude/skills/*/scripts",
+        "scripts"
+      ]
+    }
+  },
+
+  "knowledge_layers": {
+    "personal": {
+      "path": ".claude/skills",
+      "priority": 1
+    },
+    "team": {
+      "path": "plugins/team-playbook/skills",
+      "priority": 2
+    },
+    "enterprise": {
+      "path": "plugins/company-standards/skills",
+      "priority": 3
+    }
+  },
+
+  "ci_integration": {
+    "github_actions": {
+      "workflow_file": ".github/workflows/validate-memory.yml",
+      "required_checks": [
+        "skill-format-validation",
+        "negative-knowledge-present",
+        "context-budget-check"
+      ]
+    }
+  },
+
+  "metadata": {
+    "created": "2025-01-01",
+    "flywheel_version": "1.0.0",
+    "compatible_with": ["claude-code-sdk-0.1.0+"]
+  }
+}

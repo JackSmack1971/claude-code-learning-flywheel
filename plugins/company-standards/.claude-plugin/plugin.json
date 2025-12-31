@@ -1,0 +1,36 @@
+{
+  "name": "company-standards",
+  "version": "1.0.0",
+  "description": "Enterprise-wide standards and compliance requirements",
+  "type": "skill-library",
+
+  "author": {
+    "name": "Your Organization",
+    "email": "platform-team@yourcompany.com"
+  },
+
+  "skills": {
+    "directory": "skills",
+    "scope": "enterprise",
+    "priority": 3
+  },
+
+  "dependencies": [],
+
+  "compatibility": {
+    "claude-code-sdk": ">=0.1.0",
+    "flywheel-version": ">=1.0.0"
+  },
+
+  "metadata": {
+    "created": "2025-01-01",
+    "updated": "2025-01-01",
+    "maintainer": "Platform Engineering Team"
+  },
+
+  "governance": {
+    "required": true,
+    "override_allowed": false,
+    "audit_log": true
+  }
+}
