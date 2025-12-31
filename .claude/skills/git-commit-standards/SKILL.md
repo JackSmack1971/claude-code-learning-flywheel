@@ -3,8 +3,8 @@ name: git-commit-standards
 description: "Use when creating git commits or pull requests. Enforces conventional commit format and atomic change principles. Verified on Git 2.30+"
 author: "Claude Code Learning Flywheel Team"
 allowed-tools: ["Bash", "Read", "Grep"]
-version: 1.0.0
-last_verified: "2025-01-01"
+version: 1.1.0
+last_verified: "2025-12-31"
 tags: ["git", "workflow", "team-standards"]
 related-skills: []
 ---
@@ -61,6 +61,9 @@ This skill defines the team's git commit and pull request standards, ensuring co
 ---
 
 ## 3. Verified Procedure
+
+> **IMPORTANT:** This skill is a "Tool Wrapper" - DO NOT analyze commit message format yourself.
+> Use the deterministic validation script for accuracy and speed.
 
 ### Prerequisites Check
 
@@ -135,10 +138,12 @@ EOF
 
 **Validation:**
 ```bash
-# Check commit message format
-git log -1 --pretty=format:%s
+# DO NOT validate commit message text manually
+# Use the deterministic script instead:
+python scripts/validate_commit_msg.py HEAD
 
-# Expected: Matches pattern "type(scope): description"
+# Expected output: "✅ Commit message follows conventional format"
+# If errors returned, fix them based ONLY on script output
 ```
 
 ### Step 3: Verify Before Push
@@ -242,6 +247,7 @@ git log -1 --pretty=%B
 
 | Date | Version | Change Summary | Trigger |
 |------|---------|----------------|---------|
+| 2025-12-31 | 1.1.0 | Refactored to Tool Wrapper pattern, verified skill still accurate | Architectural audit remediation |
 | 2025-01-01 | 1.0.0 | Initial skill creation | Setup learning flywheel scaffold |
 
 ---

@@ -130,6 +130,110 @@ jobs:
 
           echo "✅ All skills within context budget ($MAX_LINES lines)"
 
+  drift-detection:
+    name: Detect Stale Skills (Drift Detection)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for git log analysis
+
+      - name: Check for stale skills
+        run: |
+          STALE_THRESHOLD_DAYS=180
+          CURRENT_DATE=$(date +%s)
+          STALE_SKILLS=0
+
+          echo "🔍 Checking for skills not modified in ${STALE_THRESHOLD_DAYS} days..."
+          echo ""
+
+          SKILLS=$(find .claude/skills -name "SKILL.md" 2>/dev/null)
+
+          if [ -z "$SKILLS" ]; then
+            echo "No skills found - skipping drift detection"
+            exit 0
+          fi
+
+          for skill in $SKILLS; do
+            # Get last commit date for this file
+            LAST_MODIFIED=$(git log -1 --format=%ct "$skill" 2>/dev/null || echo "0")
+
+            if [ "$LAST_MODIFIED" -eq "0" ]; then
+              echo "⚠️  [NEW] $skill (not yet committed)"
+              continue
+            fi
+
+            DAYS_SINCE_MODIFIED=$(( ($CURRENT_DATE - $LAST_MODIFIED) / 86400 ))
+
+            if [ $DAYS_SINCE_MODIFIED -gt $STALE_THRESHOLD_DAYS ]; then
+              echo "⏰ [STALE] $skill (last modified ${DAYS_SINCE_MODIFIED} days ago)"
+              STALE_SKILLS=$((STALE_SKILLS + 1))
+            fi
+          done
+
+          echo ""
+          if [ $STALE_SKILLS -gt 0 ]; then
+            echo "⚠️  Found $STALE_SKILLS stale skill(s)"
+            echo "📝 ACTION: Update 'last_verified' field or archive to prevent Context Rot"
+            echo "   Stale skills may contain outdated information that degrades agent performance"
+          else
+            echo "✅ All skills are fresh (modified within ${STALE_THRESHOLD_DAYS} days)"
+          fi
+
+      - name: Comment drift report on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const { execSync } = require('child_process');
+
+            const STALE_THRESHOLD_DAYS = 180;
+            const skills = execSync('find .claude/skills -name "SKILL.md" 2>/dev/null || true').toString().trim().split('\n').filter(Boolean);
+
+            if (skills.length === 0) {
+              console.log('No skills found');
+              return;
+            }
+
+            let staleSkills = [];
+            const currentDate = Math.floor(Date.now() / 1000);
+
+            for (const skill of skills) {
+              try {
+                const lastModified = parseInt(execSync(`git log -1 --format=%ct "${skill}" 2>/dev/null || echo "0"`).toString().trim());
+                const daysSinceModified = Math.floor((currentDate - lastModified) / 86400);
+
+                if (lastModified > 0 && daysSinceModified > STALE_THRESHOLD_DAYS) {
+                  staleSkills.push({ path: skill, days: daysSinceModified });
+                }
+              } catch (e) {
+                console.log(`Could not check ${skill}: ${e.message}`);
+              }
+            }
+
+            if (staleSkills.length > 0) {
+              let comment = `### ⏰ Drift Detection Report\n\n`;
+              comment += `Found **${staleSkills.length}** stale skill(s) (not modified in >${STALE_THRESHOLD_DAYS} days):\n\n`;
+
+              staleSkills.forEach(s => {
+                comment += `- \`${s.path}\` - ${s.days} days old\n`;
+              });
+
+              comment += `\n**Action Required:** Update \`last_verified\` field or archive these skills to prevent "Context Rot".\n`;
+              comment += `Stale skills may contain outdated information that degrades agent performance.`;
+
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment
+              });
+            }
+
   skill-statistics:
     name: Generate Skill Statistics
     runs-on: ubuntu-latest
