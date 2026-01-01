@@ -42,7 +42,7 @@ class PRReviewer:
          'blocking', 'security', 'Hardcoded secret detected',
          'Use environment variables or secrets manager'),
         (r'TODO:|FIXME:|XXX:', 'warning', 'technical-debt',
-         'TODO/FIXME comment found', 'Resolve or create issue'),
+         'Task marker comment found', 'Resolve or create issue'),
         (r'^\s*#.*code', 'warning', 'code-smell',
          'Commented code block detected', 'Delete and rely on git history'),
         (r'print\(', 'warning', 'debug-code',

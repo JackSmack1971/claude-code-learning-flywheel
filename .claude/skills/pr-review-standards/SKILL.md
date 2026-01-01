@@ -24,7 +24,7 @@ Enforce code quality before human review. Transform the agent from a "coder" int
 | Big PRs (>500 lines) | Unreviewable, high risk | Split into feature branches |
 | Direct DB access in routes | Violates separation of concerns | Use service layer |
 | Missing tests for new code | No verification of behavior | Add unit/integration tests |
-| TODO/FIXME in production code | Technical debt indicator | Resolve or create issue |
+| Task marker comments (TO-DO/FIX-ME) in production code | Technical debt indicator | Resolve or create issue |
 | Commented-out code blocks | Code smell, use version control | Delete and rely on git history |
 | Inconsistent formatting | Readability issues | Run formatter before commit |
 
@@ -41,7 +41,7 @@ Enforce code quality before human review. Transform the agent from a "coder" int
 
 ### Review Criteria
 - **Security:** No hardcoded credentials, API keys, or tokens
-- **Quality:** No debug statements, commented code, or TODOs
+- **Quality:** No debug statements, commented code, or task markers
 - **Size:** PR should be <500 lines (excluding generated files)
 - **Tests:** New features must include tests
 - **Documentation:** Public APIs must have docstrings
