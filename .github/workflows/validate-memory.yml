@@ -262,6 +262,86 @@ jobs:
             .claude/skills/**/*.md
           retention-days: 30
 
+  governance-enforcement:
+    name: Pre-Commit Governance (LSP-First, Zero-Context)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run governance checks
+        id: governance
+        run: |
+          # Check all changed files, not just staged
+          git fetch origin ${{ github.event.pull_request.base.ref || 'main' }}
+
+          CHANGED_FILES=$(git diff --name-only origin/${{ github.event.pull_request.base.ref || 'main' }}...HEAD)
+
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+
+          # For CI, we simulate "staging" by checking changed files directly
+          # Run governance script (it will read from working directory)
+          python scripts/pre_commit_governance.py
+        continue-on-error: true
+
+      - name: Comment governance report on PR
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const { execSync } = require('child_process');
+
+            // Check for governance violations by running the script again and capturing output
+            let output;
+            try {
+              output = execSync('python scripts/pre_commit_governance.py 2>&1', { encoding: 'utf-8' });
+            } catch (e) {
+              output = e.stdout || e.message;
+            }
+
+            const hasErrors = output.includes('❌') || output.includes('BLOCKING ERRORS');
+            const hasWarnings = output.includes('⚠️') && output.includes('WARNINGS');
+
+            if (hasErrors || hasWarnings) {
+              let comment = `### 🛡️ Governance Check Report\n\n`;
+
+              if (hasErrors) {
+                comment += `❌ **POLICY VIOLATIONS DETECTED**\n\n`;
+              } else if (hasWarnings) {
+                comment += `⚠️ **Warnings detected** (commit allowed but review recommended)\n\n`;
+              }
+
+              comment += `\`\`\`\n${output}\n\`\`\`\n\n`;
+              comment += `---\n`;
+              comment += `**Governance Rules:**\n`;
+              comment += `- ✅ LSP-First: Use \`cclsp\` for code navigation, not \`grep\`\n`;
+              comment += `- ✅ Zero-Context: Move code >50 lines to \`scripts/\`\n`;
+              comment += `- ✅ Negative Knowledge: Document failure modes in skills\n`;
+              comment += `- ✅ Verification: Add executable tests to skills\n\n`;
+              comment += `See \`CLAUDE.md § 6\` for architectural principles.`;
+
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment
+              });
+            }
+
+      - name: Fail if governance errors found
+        if: steps.governance.outcome == 'failure'
+        run: |
+          echo "❌ Governance checks failed - policy violations must be fixed"
+          exit 1
+
   verify-skills:
     name: Execute Skill Verification Tests (Proof of Correctness)
     runs-on: ubuntu-latest
