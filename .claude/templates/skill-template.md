@@ -7,6 +7,10 @@ version: 1.0.0
 last_verified: "YYYY-MM-DD"  # Date this skill was last verified to work
 tags: []  # Optional: ["database", "deployment", "testing"]
 related-skills: []  # Optional: ["other-skill-name"]
+verification:
+  test_script: "tests/skills/test_[skill-name].py"  # Path to executable test
+  command: "pytest tests/skills/test_[skill-name].py -v"  # Command to run verification
+  frequency: "on-change"  # or "daily", "weekly"
 ---
 
 # [Skill Name]
@@ -251,15 +255,78 @@ Track when and why this skill was updated:
 2. Replace all `[bracketed placeholders]` with actual content
 3. Delete the example entries from Failed Attempts table
 4. Populate with at least ONE real failure from your experience
-5. Run `python scripts/validate_memory.py` to verify format
-6. Commit with message: `memory: create [skill-name]`
+5. **[NEW] Create verification test** in `tests/skills/test_[skill-name].py`
+6. Run `python scripts/validate_memory.py` to verify format
+7. Run `python scripts/verify_skills.py --skill [skill-name]` to test verification
+8. Commit with message: `memory: create [skill-name]`
 
 **Required sections (validator will fail without these):**
 - Negative Knowledge / Failed Attempts table (at least 1 entry)
 - Verified Procedure (at least 3 steps)
 - Description in frontmatter (must contain "Use when")
+- **[RECOMMENDED]** Verification test (proves skill correctness)
 
 **Optional sections (delete if unused):**
 - Troubleshooting (if no known errors yet)
 - Configuration Reference (if no config needed)
 - Reference Links (if self-contained)
+
+---
+
+## Verification Test Guide
+
+**Why verification tests?**
+- Proves the skill's instructions still work (prevents "Context Rot")
+- Auto-updates `last_verified` date when tests pass
+- Transforms documentation into trustworthy infrastructure
+
+**How to write a verification test:**
+
+Create `tests/skills/test_[skill-name].py`:
+
+```python
+#!/usr/bin/env python3
+"""
+Verification test for [skill-name] skill.
+
+This test proves the skill's Zero-Context Scripts and procedures
+are still valid and haven't been broken by dependency changes.
+"""
+import subprocess
+import pytest
+from pathlib import Path
+
+def test_skill_script_is_executable():
+    """Verify the skill's script can execute without errors."""
+    script = Path(".claude/skills/[skill-name]/scripts/[script-name].py")
+    assert script.exists(), f"Script not found: {script}"
+
+    # Test with valid input
+    result = subprocess.run(
+        ["python3", str(script), "--help"],
+        capture_output=True,
+        text=True
+    )
+
+    # Script should exit cleanly
+    assert result.returncode in [0, 1], f"Script crashed: {result.stderr}"
+
+def test_skill_procedure_validation():
+    """Test that the skill's validation logic works correctly."""
+    # Example: Test the validator accepts good input
+    # Example: Test the validator rejects bad input
+    # This is skill-specific - customize for your use case
+    pass
+```
+
+**Run verification:**
+```bash
+# Verify single skill
+python scripts/verify_skills.py --skill [skill-name]
+
+# Auto-update last_verified on success
+python scripts/verify_skills.py --skill [skill-name] --update-dates
+
+# Verify all skills
+python scripts/verify_skills.py
+```

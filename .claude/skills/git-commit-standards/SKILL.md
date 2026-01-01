@@ -3,10 +3,14 @@ name: git-commit-standards
 description: "Use when creating git commits or pull requests. Enforces conventional commit format and atomic change principles. Verified on Git 2.30+"
 author: "Claude Code Learning Flywheel Team"
 allowed-tools: ["Bash", "Read", "Grep"]
-version: 1.1.0
+version: 1.2.0
 last_verified: "2025-12-31"
 tags: ["git", "workflow", "team-standards"]
 related-skills: []
+verification:
+  test_script: "tests/skills/test_git_commit_standards.py"
+  command: "python3 tests/skills/test_git_commit_standards.py"
+  frequency: "on-change"
 ---
 
 # Git Commit Standards
@@ -247,6 +251,7 @@ git log -1 --pretty=%B
 
 | Date | Version | Change Summary | Trigger |
 |------|---------|----------------|---------|
+| 2026-01-01 | 1.2.0 | Added executable verification framework integration | Agent Ops framework enhancement |
 | 2025-12-31 | 1.1.0 | Refactored to Tool Wrapper pattern, verified skill still accurate | Architectural audit remediation |
 | 2025-01-01 | 1.0.0 | Initial skill creation | Setup learning flywheel scaffold |
 
