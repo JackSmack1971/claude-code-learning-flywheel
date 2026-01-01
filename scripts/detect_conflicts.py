@@ -66,7 +66,14 @@ class SkillInfo:
 
 
 def extract_frontmatter(content: str) -> Dict:
-    """Extract YAML frontmatter from markdown content."""
+    """Extract YAML frontmatter from markdown content.
+
+    Robust parser that handles:
+    - Quoted strings with colons
+    - Arrays (inline and empty)
+    - Comments
+    - Edge cases (missing values, malformed lines)
+    """
     if not content.startswith('---'):
         return {}
 
@@ -78,20 +85,66 @@ def extract_frontmatter(content: str) -> Dict:
         frontmatter_text = parts[1].strip()
         metadata = {}
 
-        for line in frontmatter_text.split('\n'):
+        for line_num, line in enumerate(frontmatter_text.split('\n'), 1):
+            original_line = line
             line = line.strip()
-            if ':' in line and not line.startswith('#'):
+
+            # Skip empty lines and comments
+            if not line or line.startswith('#'):
+                continue
+
+            # Must contain colon for key:value
+            if ':' not in line:
+                continue
+
+            try:
+                # Split on first colon only
                 key, value = line.split(':', 1)
                 key = key.strip()
-                value = value.strip().strip('"').strip("'")
+                value = value.strip()
 
-                # Handle arrays
-                if value.startswith('[') and value.endswith(']'):
-                    value = [v.strip().strip('"').strip("'") for v in value[1:-1].split(',') if v.strip()]
-                elif value == '[]':
-                    value = []
+                # Validate key (must be non-empty and valid YAML key)
+                if not key or key.startswith('-'):
+                    continue
+
+                # Handle quoted strings (preserve colons inside quotes)
+                if value:
+                    # Remove quotes if present
+                    if (value.startswith('"') and value.endswith('"')) or \
+                       (value.startswith("'") and value.endswith("'")):
+                        value = value[1:-1]
+                    # Handle arrays
+                    elif value.startswith('[') and value.endswith(']'):
+                        # Parse inline array
+                        array_content = value[1:-1].strip()
+                        if not array_content:
+                            value = []
+                        else:
+                            # Split by comma and clean each item
+                            items = []
+                            for item in array_content.split(','):
+                                item = item.strip()
+                                # Remove quotes from array items
+                                if (item.startswith('"') and item.endswith('"')) or \
+                                   (item.startswith("'") and item.endswith("'")):
+                                    item = item[1:-1]
+                                if item:
+                                    items.append(item)
+                            value = items
+                    # Handle empty/null values
+                    elif value.lower() in ('null', '~', ''):
+                        value = ''
+                else:
+                    value = ''
 
                 metadata[key] = value
+
+            except ValueError:
+                # Line doesn't follow key:value format, skip it
+                continue
+            except Exception:
+                # Skip malformed lines silently
+                continue
 
         return metadata
 
@@ -137,10 +190,32 @@ def find_all_skills(base_path: Path = Path('.claude/skills')) -> List[SkillInfo]
 
 
 def tokenize(text: str) -> List[str]:
-    """Tokenize text into words."""
-    # Remove punctuation and split
-    text = re.sub(r'[^\w\s]', ' ', text.lower())
-    return [word for word in text.split() if len(word) > 2]
+    """Tokenize text into words, preserving coding-relevant symbols.
+
+    Preserves:
+    - Hyphens for kebab-case (e.g., 'api-endpoint')
+    - Underscores for snake_case (e.g., 'user_auth')
+    - Periods for file extensions and method calls (e.g., '.py', 'config.json')
+    - At-signs for decorators and mentions (e.g., '@property')
+
+    This prevents false negatives where 'api-endpoint' and 'api endpoint'
+    would be treated as identical.
+    """
+    # Replace most punctuation with spaces, but preserve coding symbols
+    # Keep: - _ . @ (coding-relevant)
+    # Remove: , ; : ! ? " ' ( ) [ ] { } etc.
+    text = re.sub(r'[^\w\s\-_.@]', ' ', text.lower())
+
+    # Split on whitespace and filter short tokens
+    tokens = []
+    for word in text.split():
+        # Keep tokens that are:
+        # - At least 2 chars (reduced from 3 to keep file extensions like '.py')
+        # - Or single-char tokens that are coding symbols (like '@')
+        if len(word) >= 2 or word in ['@', '.']:
+            tokens.append(word)
+
+    return tokens
 
 
 def jaccard_similarity(text1: str, text2: str) -> float:

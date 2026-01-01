@@ -19,8 +19,9 @@ import os
 import sys
 import re
 import argparse
+import subprocess
 from pathlib import Path
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Optional
 from datetime import datetime, timedelta
 
 
@@ -73,8 +74,92 @@ class ValidationResult:
             print("  ✅ Valid")
 
 
+def get_git_file_content(file_path: Path, ref: str = 'HEAD') -> Optional[str]:
+    """Get file content from git at a specific ref (commit/branch)."""
+    try:
+        # Check if we're in a git repo
+        result = subprocess.run(
+            ['git', 'rev-parse', '--git-dir'],
+            capture_output=True,
+            text=True,
+            cwd=file_path.parent if file_path.is_file() else file_path,
+            timeout=5
+        )
+        if result.returncode != 0:
+            return None
+
+        # Get file content from git
+        result = subprocess.run(
+            ['git', 'show', f'{ref}:{file_path}'],
+            capture_output=True,
+            text=True,
+            cwd=Path.cwd(),
+            timeout=5
+        )
+        if result.returncode == 0:
+            return result.stdout
+        return None
+    except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+        return None
+
+
+def parse_semver(version: str) -> Optional[Tuple[int, int, int]]:
+    """Parse semantic version string (e.g., '1.2.3') into tuple (major, minor, patch)."""
+    try:
+        # Handle version strings like "1.0.0" or "v1.0.0"
+        version = version.strip().lower().lstrip('v')
+        parts = version.split('.')
+        if len(parts) >= 3:
+            major = int(parts[0])
+            minor = int(parts[1])
+            patch = int(parts[2])
+            return (major, minor, patch)
+        return None
+    except (ValueError, AttributeError):
+        return None
+
+
+def compare_versions(old_ver: str, new_ver: str) -> str:
+    """Compare two semantic versions.
+
+    Returns:
+        'bumped' if version increased
+        'same' if versions are identical
+        'invalid' if either version is malformed
+    """
+    old = parse_semver(old_ver)
+    new = parse_semver(new_ver)
+
+    if not old or not new:
+        return 'invalid'
+
+    if new > old:
+        return 'bumped'
+    elif new == old:
+        return 'same'
+    else:
+        return 'invalid'
+
+
+def extract_negative_knowledge(body: str) -> str:
+    """Extract the Negative Knowledge section from skill body."""
+    # Match "Negative Knowledge" or "Failed Attempts" section
+    pattern = r'#+\s*(Negative Knowledge|Failed Attempts).*?\n(.*?)(?=\n#+|\Z)'
+    match = re.search(pattern, body, re.DOTALL | re.IGNORECASE)
+    if match:
+        return match.group(2).strip()
+    return ''
+
+
 def extract_frontmatter(content: str) -> Tuple[Dict, str]:
-    """Extract YAML frontmatter and body from markdown content."""
+    """Extract YAML frontmatter and body from markdown content.
+
+    Robust parser that handles:
+    - Quoted strings with colons
+    - Arrays (inline and empty)
+    - Comments
+    - Edge cases (missing values, malformed lines)
+    """
     if not content.startswith('---'):
         return {}, content
 
@@ -86,27 +171,75 @@ def extract_frontmatter(content: str) -> Tuple[Dict, str]:
         frontmatter_text = parts[1].strip()
         body = parts[2].strip()
 
-        # Simple YAML parser (handles basic key: value pairs)
+        # Robust YAML parser
         metadata = {}
-        for line in frontmatter_text.split('\n'):
+        for line_num, line in enumerate(frontmatter_text.split('\n'), 1):
+            original_line = line
             line = line.strip()
-            if ':' in line and not line.startswith('#'):
+
+            # Skip empty lines and comments
+            if not line or line.startswith('#'):
+                continue
+
+            # Must contain colon for key:value
+            if ':' not in line:
+                continue
+
+            try:
+                # Split on first colon only
                 key, value = line.split(':', 1)
                 key = key.strip()
-                value = value.strip().strip('"').strip("'")
+                value = value.strip()
 
-                # Handle arrays
-                if value.startswith('[') and value.endswith(']'):
-                    value = [v.strip().strip('"').strip("'") for v in value[1:-1].split(',') if v.strip()]
-                # Handle empty arrays
-                elif value == '[]':
-                    value = []
+                # Validate key (must be non-empty and valid YAML key)
+                if not key or key.startswith('-'):
+                    continue
+
+                # Handle quoted strings (preserve colons inside quotes)
+                if value:
+                    # Remove quotes if present
+                    if (value.startswith('"') and value.endswith('"')) or \
+                       (value.startswith("'") and value.endswith("'")):
+                        value = value[1:-1]
+                    # Handle arrays
+                    elif value.startswith('[') and value.endswith(']'):
+                        # Parse inline array
+                        array_content = value[1:-1].strip()
+                        if not array_content:
+                            value = []
+                        else:
+                            # Split by comma and clean each item
+                            items = []
+                            for item in array_content.split(','):
+                                item = item.strip()
+                                # Remove quotes from array items
+                                if (item.startswith('"') and item.endswith('"')) or \
+                                   (item.startswith("'") and item.endswith("'")):
+                                    item = item[1:-1]
+                                if item:
+                                    items.append(item)
+                            value = items
+                    # Handle empty/null values
+                    elif value.lower() in ('null', '~', ''):
+                        value = ''
+                else:
+                    value = ''
 
                 metadata[key] = value
+
+            except ValueError:
+                # Line doesn't follow key:value format, skip it
+                continue
+            except Exception as parse_error:
+                # Log but don't fail on individual line parse errors
+                print(f"Warning: Failed to parse frontmatter line {line_num}: {original_line}", file=sys.stderr)
+                continue
 
         return metadata, body
 
     except Exception as e:
+        # Catastrophic failure - return empty metadata
+        print(f"Warning: Failed to extract frontmatter: {e}", file=sys.stderr)
         return {}, content
 
 
@@ -170,6 +303,56 @@ def validate_skill_file(file_path: Path) -> ValidationResult:
 
     if 'version' not in metadata:
         result.add_warning("Frontmatter missing recommended field: 'version'")
+    else:
+        # Validate semantic versioning and enforce version bumps
+        current_version = metadata['version']
+
+        # Check if version format is valid
+        if not parse_semver(current_version):
+            result.add_warning(
+                f"Invalid version format: '{current_version}'. Use semantic versioning (e.g., '1.2.3')"
+            )
+        else:
+            # Check if Negative Knowledge changed without version bump
+            try:
+                # Get relative path for git
+                try:
+                    git_path = file_path.relative_to(Path.cwd())
+                except ValueError:
+                    git_path = file_path
+
+                prev_content = get_git_file_content(git_path)
+                if prev_content:
+                    # Extract previous version and Negative Knowledge
+                    prev_metadata, prev_body = extract_frontmatter(prev_content)
+                    prev_version = prev_metadata.get('version', '')
+
+                    if prev_version:
+                        # Extract Negative Knowledge sections
+                        current_neg_knowledge = extract_negative_knowledge(body)
+                        prev_neg_knowledge = extract_negative_knowledge(prev_body)
+
+                        # If Negative Knowledge changed, version MUST be bumped
+                        if current_neg_knowledge != prev_neg_knowledge:
+                            version_comparison = compare_versions(prev_version, current_version)
+                            if version_comparison == 'same':
+                                result.add_error(
+                                    f"❌ GOVERNANCE VIOLATION: Negative Knowledge section changed "
+                                    f"but version not bumped (still {current_version}). "
+                                    f"Bump version to signal knowledge update."
+                                )
+                            elif version_comparison == 'invalid':
+                                result.add_warning(
+                                    "Version appears to have changed, but format is invalid for comparison"
+                                )
+                            else:
+                                # Version was bumped - good!
+                                result.add_info(
+                                    f"✓ Version bumped {prev_version} → {current_version} (Negative Knowledge updated)"
+                                )
+            except Exception as e:
+                # Don't fail validation if git check fails (e.g., new file, not in git)
+                pass
 
     if 'last_verified' not in metadata:
         result.add_warning("Frontmatter missing recommended field: 'last_verified' (tracks skill freshness)")
