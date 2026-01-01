@@ -316,3 +316,288 @@ git commit -m "feat(tdd): add negative knowledge about REPL fragility"
 - When YAML frontmatter schema changes (update dumper)
 - When table format conventions evolve (update regex patterns)
 - When JSON schema needs new fields (document in this section)
+
+---
+
+## 9. Pre-Commit Governance Framework (Behavioral Constraints)
+
+**Problem:** Perfect memory without behavioral constraints creates learned helplessness. The Agent might document "don't use grep" but continues using it because there's no enforcement.
+
+**Solution:** Pre-commit hooks that **reject violations** before they enter the codebase.
+
+### The Enforcement Layer
+
+The Learning Flywheel has three tiers:
+1. **Memory Engine** (`auto_retro.py`) - Captures failures
+2. **Verification Tests** (`verify_skills.py`) - Proves correctness
+3. **Governance Hooks** (`pre_commit_governance.py`) - **Prevents violations**
+
+This completes the loop: **Learn → Verify → Enforce → Learn**
+
+### Architecture
+
+**Pre-Commit Governance Hook** (`scripts/pre_commit_governance.py`):
+- Runs automatically on `git commit`
+- Scans staged files for policy violations
+- Blocks commits that violate architectural principles
+- Provides actionable fix suggestions
+
+**Enforced Rules:**
+
+| Rule | Violation | Fix |
+|------|-----------|-----|
+| **LSP-First Navigation** | SKILL.md mentions `grep` for code navigation without LSP alternatives | Add `cclsp definition <symbol>` examples |
+| **Negative Knowledge Required** | SKILL.md lacks "Negative Knowledge" or failure documentation table | Add `\| Attempt \| Failure \| Cost \| Fix \|` table |
+| **Zero-Context Scripts** | Code blocks >50 lines in SKILL.md | Move to `scripts/` and reference |
+| **Verification Metadata** | Skills without `verification:` frontmatter field | Add test_script path in frontmatter |
+| **Conventional Commits** | Commit messages don't follow `type(scope): description` | Use `feat\|fix\|docs\|refactor` prefix |
+
+### Installation
+
+**One-Time Setup:**
+```bash
+# Install the pre-commit hook
+bash scripts/install_hooks.sh
+
+# Output:
+# ✅ Pre-commit hook installed at .git/hooks/pre-commit
+# ✅ Governance script is executable
+```
+
+**Manual Installation:**
+```bash
+# Make script executable
+chmod +x scripts/pre_commit_governance.py
+
+# Create symlink (or copy) to .git/hooks/pre-commit
+ln -s ../../scripts/pre_commit_governance.py .git/hooks/pre-commit
+```
+
+### Usage
+
+**Automatic (on every commit):**
+```bash
+# Make changes to a SKILL.md file
+git add .claude/skills/example/SKILL.md
+
+# Attempt commit - hook runs automatically
+git commit -m "Update skill"
+
+# If violations detected:
+# ❌ COMMIT BLOCKED - Governance Violations Detected
+#
+# ❌ .claude/skills/example/SKILL.md
+#    Rule: LSP-First Navigation
+#    Issue: Found 5 grep mentions but 0 LSP references...
+```
+
+**Manual (test before committing):**
+```bash
+# Run governance checks on current working directory
+python scripts/pre_commit_governance.py
+
+# Exit codes:
+#   0 = All checks passed
+#   1 = Policy violations found
+#   2 = Script error (fail-open for safety)
+```
+
+**Bypass Hook (not recommended):**
+```bash
+# Only use when governance script is broken, not to skip fixes
+git commit --no-verify -m "Emergency hotfix"
+```
+
+### Example: Violation Detection
+
+**Scenario:** You update a skill with grep-heavy examples.
+
+```markdown
+<!-- .claude/skills/code-search/SKILL.md -->
+## Usage
+
+Find function definitions:
+```bash
+grep -r "function myFunc" .
+grep -r "class MyClass" src/
+```
+
+**Hook Output:**
+```
+🔍 Governance Check: 1 staged file(s)...
+
+======================================================================
+🛡️  GOVERNANCE REPORT
+======================================================================
+
+❌ BLOCKING ERRORS (2):
+
+❌ .claude/skills/code-search/SKILL.md
+   Rule: LSP-First Navigation
+   Issue: Found 5 grep mentions for code navigation but only 0 LSP references.
+          Use 'cclsp' for symbol lookup.
+          Examples: 'cclsp definition <symbol>', 'cclsp references <symbol>'
+
+❌ .claude/skills/code-search/SKILL.md
+   Rule: Negative Knowledge Required
+   Issue: SKILL.md must document failure modes. Add a table with:
+          | Attempt | Failure | Cost | Fix |
+          See CLAUDE.md section 6 for details.
+
+======================================================================
+📚 Review: CLAUDE.md § 6 (Core Principles)
+🔧 Tools: Use 'cclsp' for navigation, scripts/ for logic
+🧠 Memory: Document failures in Negative Knowledge tables
+======================================================================
+
+🚫 COMMIT BLOCKED - Fix errors above to proceed
+```
+
+**After Fixing:**
+```markdown
+<!-- .claude/skills/code-search/SKILL.md -->
+## Usage
+
+Find function definitions using LSP:
+```bash
+# Semantic search (precise, fast)
+cclsp definition myFunc
+
+# Find all references
+cclsp references MyClass
+```
+
+For content search (non-code), grep is acceptable:
+```bash
+grep -r "TODO" docs/
+```
+
+## Negative Knowledge
+
+| Attempt | Failure | Cost | Fix |
+|---------|---------|------|-----|
+| Used `grep -r` to find class definitions | 500+ false positives in node_modules | 15k tokens | Use `cclsp definition ClassName` |
+```
+
+**Hook Output:**
+```
+✅ All governance checks passed - commit approved
+```
+
+### CI/CD Integration
+
+The governance framework runs in GitHub Actions on every PR:
+
+**Workflow:** `.github/workflows/validate-memory.yml`
+
+**Job:** `governance-enforcement`
+
+**What it does:**
+- Runs `pre_commit_governance.py` on all changed files
+- Comments on PRs with violation reports
+- Fails CI if blocking errors found (prevents merge)
+- Allows warnings (soft enforcement)
+
+**PR Comment Example:**
+```markdown
+### 🛡️ Governance Check Report
+
+❌ **POLICY VIOLATIONS DETECTED**
+
+**Governance Rules:**
+- ✅ LSP-First: Use `cclsp` for code navigation, not `grep`
+- ✅ Zero-Context: Move code >50 lines to `scripts/`
+- ✅ Negative Knowledge: Document failure modes in skills
+- ✅ Verification: Add executable tests to skills
+
+See `CLAUDE.md § 6` for architectural principles.
+```
+
+### Testing the Framework
+
+**Test Suite:** `tests/test_governance.py`
+
+```bash
+# Run all governance tests
+python tests/test_governance.py
+
+# Output:
+# ✅ PASS: Valid Skill Detection
+# ✅ PASS: Invalid Skill Detection
+# ✅ PASS: Script Execution
+# 3/3 tests passed
+```
+
+**Test Fixtures:**
+- `tests/fixtures/governance/valid_skill.md` - Passes all checks
+- `tests/fixtures/governance/invalid_skill.md` - Violates multiple rules
+
+### Customization
+
+**Adjust Thresholds** (`scripts/pre_commit_governance.py`):
+```python
+MAX_GREP_MENTIONS = 2        # Allow minimal grep for content search
+REQUIRED_LSP_MENTIONS = 1    # Minimum LSP references in skills
+MAX_INLINE_CODE_LINES = 50   # Code blocks larger → move to scripts/
+```
+
+**Add New Rules:**
+1. Define violation in `check_skill_file()` function
+2. Add test case in `tests/test_governance.py`
+3. Update `CLAUDE.md` documentation
+4. Run `python tests/test_governance.py` to verify
+
+### Why This Matters
+
+**Without Governance:**
+- Agent reads "don't use grep" in SKILL.md
+- Agent uses grep anyway (no cost for violating principle)
+- Skill gets updated with more "don't use grep" advice
+- Cycle repeats (learned helplessness)
+
+**With Governance:**
+- Agent attempts to commit skill with grep examples
+- Hook blocks commit with actionable error
+- Agent fixes violation (uses LSP examples)
+- Correct pattern enters codebase
+- **System improves through enforcement**
+
+### Metrics & Success Indicators
+
+**How to measure effectiveness:**
+
+- **Violation Frequency:** Track how often hook blocks commits (should decrease over time)
+- **Fix Time:** Measure time from blocked commit to successful commit (should decrease)
+- **Pattern Adoption:** Count LSP mentions vs grep mentions in new skills (LSP should dominate)
+- **False Positives:** Track bypasses with `--no-verify` (should be rare)
+
+**Dashboard Query (Git History):**
+```bash
+# Count commits blocked by governance (inferred from retries)
+git log --all --oneline | grep -i "governance\|fix.*violation" | wc -l
+
+# Measure LSP adoption in skills
+grep -r "cclsp" .claude/skills/ | wc -l   # LSP usage
+grep -r "grep -r" .claude/skills/ | wc -l  # Anti-pattern usage
+```
+
+### Failure Modes & Mitigations
+
+| Failure Mode | Symptom | Mitigation |
+|--------------|---------|------------|
+| **Hook breaks Git workflow** | All commits blocked | Script has fail-open behavior (exit 0 on exception) |
+| **Too strict (false positives)** | Valid commits rejected | Adjust thresholds in script config |
+| **Developers bypass with --no-verify** | Rules not enforced | CI job catches bypasses on PR |
+| **Script has bugs** | Crashes on edge cases | Test suite validates against fixtures |
+
+### Integration with Learning Flywheel
+
+The governance framework closes the behavioral loop:
+
+1. **Agent encounters failure** (e.g., grep times out on large codebase)
+2. **Auto-retrospective captures failure** (`auto_retro.py` updates SKILL.md)
+3. **Verification proves fix works** (`verify_skills.py` tests LSP approach)
+4. **Governance prevents regression** (hook blocks future grep-heavy commits)
+5. **System learns and enforces** (next agent session inherits improved constraints)
+
+This is **Institutional Memory with Enforcement** - not just documenting what went wrong, but preventing it from happening again.
