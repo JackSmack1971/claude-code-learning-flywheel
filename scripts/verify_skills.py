@@ -72,6 +72,24 @@ class VerificationResult:
         return f"{status_icon} [{status}] {self.skill_name} ({self.execution_time:.2f}s)"
 
 
+def safe_relative_path(path: Path, base: Optional[Path] = None) -> str:
+    """Safely compute relative path, falling back to absolute if needed.
+
+    This prevents ValueError when paths don't share a common ancestor
+    or when mixing relative and absolute paths.
+    """
+    try:
+        # Resolve both paths to absolute
+        abs_path = path.resolve()
+        abs_base = (base or Path.cwd()).resolve()
+
+        # Try to compute relative path
+        return str(abs_path.relative_to(abs_base))
+    except ValueError:
+        # Paths don't share common ancestor - use absolute path
+        return str(path.resolve())
+
+
 def extract_frontmatter(content: str) -> Tuple[Dict, str]:
     """Extract YAML frontmatter and body from markdown content.
 
@@ -406,7 +424,7 @@ def generate_verification_report(results: List[VerificationResult], output_path:
     for result in results:
         skill_data = {
             "name": result.skill_name,
-            "path": str(result.skill_path.relative_to(Path.cwd())),
+            "path": safe_relative_path(result.skill_path),
             "has_verification": result.has_verification,
             "test_passed": result.test_passed,
             "last_verified": result.last_verified,
