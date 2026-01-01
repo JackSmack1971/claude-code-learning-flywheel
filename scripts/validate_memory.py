@@ -24,6 +24,9 @@ from pathlib import Path
 from typing import List, Tuple, Dict, Optional
 from datetime import datetime, timedelta
 
+# Import robust YAML parser
+from yaml_parser import extract_frontmatter
+
 
 # Governance Rules
 MAX_SKILL_LINES = 500  # Hard limit from CLAUDE.md governance framework
@@ -167,98 +170,6 @@ def extract_negative_knowledge(body: str) -> str:
     if match:
         return match.group(2).strip()
     return ''
-
-
-def extract_frontmatter(content: str) -> Tuple[Dict, str]:
-    """Extract YAML frontmatter and body from markdown content.
-
-    Robust parser that handles:
-    - Quoted strings with colons
-    - Arrays (inline and empty)
-    - Comments
-    - Edge cases (missing values, malformed lines)
-    """
-    if not content.startswith('---'):
-        return {}, content
-
-    try:
-        parts = content.split('---', 2)
-        if len(parts) < 3:
-            return {}, content
-
-        frontmatter_text = parts[1].strip()
-        body = parts[2].strip()
-
-        # Robust YAML parser
-        metadata = {}
-        for line_num, line in enumerate(frontmatter_text.split('\n'), 1):
-            original_line = line
-            line = line.strip()
-
-            # Skip empty lines and comments
-            if not line or line.startswith('#'):
-                continue
-
-            # Must contain colon for key:value
-            if ':' not in line:
-                continue
-
-            try:
-                # Split on first colon only
-                key, value = line.split(':', 1)
-                key = key.strip()
-                value = value.strip()
-
-                # Validate key (must be non-empty and valid YAML key)
-                if not key or key.startswith('-'):
-                    continue
-
-                # Handle quoted strings (preserve colons inside quotes)
-                if value:
-                    # Remove quotes if present
-                    if (value.startswith('"') and value.endswith('"')) or \
-                       (value.startswith("'") and value.endswith("'")):
-                        value = value[1:-1]
-                    # Handle arrays
-                    elif value.startswith('[') and value.endswith(']'):
-                        # Parse inline array
-                        array_content = value[1:-1].strip()
-                        if not array_content:
-                            value = []
-                        else:
-                            # Split by comma and clean each item
-                            items = []
-                            for item in array_content.split(','):
-                                item = item.strip()
-                                # Remove quotes from array items
-                                if (item.startswith('"') and item.endswith('"')) or \
-                                   (item.startswith("'") and item.endswith("'")):
-                                    item = item[1:-1]
-                                if item:
-                                    items.append(item)
-                            value = items
-                    # Handle empty/null values
-                    elif value.lower() in ('null', '~', ''):
-                        value = ''
-                else:
-                    value = ''
-
-                metadata[key] = value
-
-            except ValueError:
-                # Line doesn't follow key:value format, skip it
-                continue
-            except Exception as parse_error:
-                # Log but don't fail on individual line parse errors
-                print(f"Warning: Failed to parse frontmatter line {line_num}: {original_line}", file=sys.stderr)
-                continue
-
-        return metadata, body
-
-    except Exception as e:
-        # Catastrophic failure - return empty metadata
-        print(f"Warning: Failed to extract frontmatter: {e}", file=sys.stderr)
-        return {}, content
 
 
 def validate_skill_file(file_path: Path) -> ValidationResult:
