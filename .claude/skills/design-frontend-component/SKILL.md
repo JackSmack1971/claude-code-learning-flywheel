@@ -350,231 +350,26 @@ const SimpleComponent = memo(function SimpleComponent({ text }) {
 });
 ```
 
-## 3. Component Design Patterns
+## 3. Extended Patterns and Examples
 
-### Pattern 1: Container/Presenter (Smart/Dumb)
+**For detailed code examples, see [reference.md](./reference.md):**
 
-```typescript
-// Container (Smart): Handles logic, data fetching
-function UserProfileContainer() {
-  const { data: user, isLoading } = useQuery(['user'], fetchUser);
-  const mutation = useMutation(updateUser);
+- **Component Design Patterns**: Container/Presenter, Custom Hooks, Error Boundaries
+- **Styling Best Practices**: CSS Modules, Styled Components, Design Tokens
+- **Testing Patterns**: Behavior-driven testing with Testing Library
+- **Advanced Patterns**: HOCs, Slots, Reducers, Accessibility, Performance
 
-  const handleSave = (updates: Partial<User>) => {
-    mutation.mutate(updates);
-  };
+**Quick reference summary:**
 
-  if (isLoading) return <Spinner />;
+| Pattern | Use Case | See Reference |
+| :--- | :--- | :--- |
+| Container/Presenter | Separate logic from UI | reference.md §1 |
+| Custom Hooks | Extract reusable logic | reference.md §2 |
+| Error Boundaries | Graceful error handling | reference.md §3 |
+| CSS Modules | Scoped styling | reference.md §Styling |
+| Testing Library | User behavior tests | reference.md §Testing |
 
-  return <UserProfilePresenter user={user} onSave={handleSave} />;
-}
-
-// Presenter (Dumb): Pure display logic
-interface UserProfilePresenterProps {
-  user: User;
-  onSave: (updates: Partial<User>) => void;
-}
-
-function UserProfilePresenter({ user, onSave }: UserProfilePresenterProps) {
-  const [formData, setFormData] = useState(user);
-
-  return (
-    <form onSubmit={() => onSave(formData)}>
-      <Input value={formData.name} onChange={/* ... */} />
-      <Button type="submit">Save</Button>
-    </form>
-  );
-}
-```
-
-### Pattern 2: Custom Hooks for Logic Extraction
-
-```typescript
-// ✅ Extract complex logic to custom hooks
-function useFormValidation(initialValues: FormData) {
-  const [values, setValues] = useState(initialValues);
-  const [errors, setErrors] = useState({});
-
-  const validate = useCallback(() => {
-    const newErrors = {};
-    if (!values.email) newErrors.email = 'Required';
-    if (!values.password || values.password.length < 8) {
-      newErrors.password = 'Must be 8+ characters';
-    }
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  }, [values]);
-
-  return { values, setValues, errors, validate };
-}
-
-// Usage in component
-function LoginForm() {
-  const { values, setValues, errors, validate } = useFormValidation({
-    email: '',
-    password: ''
-  });
-
-  const handleSubmit = () => {
-    if (validate()) {
-      // Submit form
-    }
-  };
-
-  return (
-    <form onSubmit={handleSubmit}>
-      <Input
-        value={values.email}
-        onChange={(e) => setValues({ ...values, email: e.target.value })}
-        error={errors.email}
-      />
-      {/* ... */}
-    </form>
-  );
-}
-```
-
-### Pattern 3: Error Boundaries
-
-```typescript
-// Error boundary for graceful error handling
-class ErrorBoundary extends React.Component<
-  { children: ReactNode; fallback: ReactNode },
-  { hasError: boolean }
-> {
-  state = { hasError: false };
-
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-
-  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('Component error:', error, errorInfo);
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return this.props.fallback;
-    }
-    return this.props.children;
-  }
-}
-
-// Usage
-<ErrorBoundary fallback={<ErrorMessage />}>
-  <UserDashboard />
-</ErrorBoundary>
-```
-
-## 4. Styling Best Practices
-
-**Use CSS modules or styled-components, not inline styles:**
-
-```typescript
-// ❌ BAD: Inline styles (no theming, no reusability)
-function Button() {
-  return (
-    <button style={{
-      backgroundColor: '#007bff',
-      padding: '10px 20px',
-      borderRadius: '4px'
-    }}>
-      Click me
-    </button>
-  );
-}
-
-// ✅ GOOD: CSS modules
-import styles from './Button.module.css';
-
-function Button() {
-  return <button className={styles.button}>Click me</button>;
-}
-
-// ✅ GOOD: Styled-components with theme
-import styled from 'styled-components';
-
-const StyledButton = styled.button`
-  background-color: ${props => props.theme.colors.primary};
-  padding: ${props => props.theme.spacing.medium};
-  border-radius: ${props => props.theme.borderRadius.small};
-`;
-```
-
-**Design tokens for consistency:**
-
-```typescript
-// theme.ts
-export const theme = {
-  colors: {
-    primary: '#007bff',
-    secondary: '#6c757d',
-    danger: '#dc3545',
-    success: '#28a745',
-  },
-  spacing: {
-    small: '0.5rem',
-    medium: '1rem',
-    large: '2rem',
-  },
-  borderRadius: {
-    small: '4px',
-    medium: '8px',
-    large: '12px',
-  },
-  typography: {
-    fontFamily: 'Inter, sans-serif',
-    fontSize: {
-      small: '0.875rem',
-      medium: '1rem',
-      large: '1.25rem',
-    },
-  },
-};
-```
-
-## 5. Testing Frontend Components
-
-**Test user behavior, not implementation:**
-
-```typescript
-// ✅ GOOD: Test behavior
-import { render, screen, fireEvent } from '@testing-library/react';
-
-describe('LoginForm', () => {
-  it('should show error when email is invalid', async () => {
-    render(<LoginForm />);
-
-    const emailInput = screen.getByLabelText('Email');
-    const submitButton = screen.getByRole('button', { name: 'Login' });
-
-    fireEvent.change(emailInput, { target: { value: 'invalid' } });
-    fireEvent.click(submitButton);
-
-    expect(await screen.findByText('Invalid email')).toBeInTheDocument();
-  });
-
-  it('should call onSubmit when form is valid', async () => {
-    const onSubmit = vi.fn();
-    render(<LoginForm onSubmit={onSubmit} />);
-
-    fireEvent.change(screen.getByLabelText('Email'), {
-      target: { value: 'test@example.com' }
-    });
-    fireEvent.change(screen.getByLabelText('Password'), {
-      target: { value: 'password123' }
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Login' }));
-
-    expect(onSubmit).toHaveBeenCalledWith({
-      email: 'test@example.com',
-      password: 'password123',
-    });
-  });
-});
-```
-
-## 6. Failed Attempts (Negative Knowledge Evolution)
+## 4. Failed Attempts (Negative Knowledge Evolution)
 
 ### ❌ Attempt: Premature abstraction
 **Context:** Created reusable component after first use
@@ -596,7 +391,7 @@ describe('LoginForm', () => {
 **Failure:** No caching, duplicate requests, complex loading states
 **Learning:** Use React Query/SWR for server state
 
-## 7. Component Design Checklist
+## 5. Component Design Checklist
 
 Before committing a component:
 
@@ -610,8 +405,9 @@ Before committing a component:
 - [ ] **Styled**: Uses design system tokens, no magic numbers
 - [ ] **Keys in Lists**: List items have unique, stable keys
 
-## 8. Governance
-- **Token Budget:** ~495 lines (within 500 limit)
+## 6. Governance
+- **Token Budget:** ~480 lines (within 500 limit)
+- **Extended Reference:** See reference.md for detailed patterns and examples
 - **Dependencies:** React 18+, TypeScript 5+, Testing Library
 - **Pattern Origin:** Atomic Design (Brad Frost), React Best Practices
 - **Maintenance:** Update as React/framework patterns evolve

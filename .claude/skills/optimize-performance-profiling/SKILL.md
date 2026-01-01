@@ -140,265 +140,6 @@ EXPLAIN ANALYZE
 SELECT * FROM users WHERE email = 'test@example.com';
 ```
 
-### Phase 3: Common Performance Fixes
-
-#### Fix 1: N+1 Query Problem
-
-```typescript
-// ❌ BAD: N+1 queries (1 query for users + N queries for posts)
-async function getUsersWithPosts() {
-  const users = await db.users.findMany();  // 1 query
-
-  for (const user of users) {
-    user.posts = await db.posts.findMany({   // N queries
-      where: { userId: user.id }
-    });
-  }
-
-  return users;
-}
-
-// ✅ GOOD: Single query with join
-async function getUsersWithPosts() {
-  return await db.users.findMany({
-    include: {
-      posts: true  // Single query with JOIN
-    }
-  });
-}
-
-// ✅ GOOD: DataLoader for batching (GraphQL)
-const userLoader = new DataLoader(async (userIds) => {
-  const users = await db.users.findMany({
-    where: { id: { in: userIds } }
-  });
-  return userIds.map(id => users.find(u => u.id === id));
-});
-```
-
-#### Fix 2: Memory Leaks
-
-```typescript
-// ❌ BAD: Event listener never removed
-useEffect(() => {
-  window.addEventListener('resize', handleResize);
-  // Missing cleanup!
-}, []);
-
-// ✅ GOOD: Cleanup subscriptions
-useEffect(() => {
-  const handleResize = () => { /* ... */ };
-  window.addEventListener('resize', handleResize);
-
-  return () => {
-    window.removeEventListener('resize', handleResize);
-  };
-}, []);
-
-// ❌ BAD: Interval never cleared
-function startPolling() {
-  setInterval(() => {
-    fetchData();
-  }, 5000);
-}
-
-// ✅ GOOD: Clear interval on unmount
-useEffect(() => {
-  const intervalId = setInterval(() => {
-    fetchData();
-  }, 5000);
-
-  return () => clearInterval(intervalId);
-}, []);
-```
-
-#### Fix 3: Bundle Size Optimization
-
-```typescript
-// ❌ BAD: Import entire library
-import _ from 'lodash';
-const result = _.debounce(fn, 300);
-
-// ✅ GOOD: Import only what you need
-import debounce from 'lodash/debounce';
-const result = debounce(fn, 300);
-
-// ❌ BAD: Import entire icon library
-import { FaUser, FaHome, FaSettings } from 'react-icons/fa';
-
-// ✅ GOOD: Use tree-shakeable imports
-import FaUser from 'react-icons/fa/FaUser';
-import FaHome from 'react-icons/fa/FaHome';
-
-// ✅ BEST: Code splitting with dynamic imports
-const HeavyComponent = lazy(() => import('./HeavyComponent'));
-
-<Suspense fallback={<Loading />}>
-  <HeavyComponent />
-</Suspense>
-```
-
-#### Fix 4: Inefficient Algorithms
-
-```typescript
-// ❌ BAD: O(n²) nested loops
-function findDuplicates(arr: number[]): number[] {
-  const duplicates = [];
-  for (let i = 0; i < arr.length; i++) {
-    for (let j = i + 1; j < arr.length; j++) {
-      if (arr[i] === arr[j]) {
-        duplicates.push(arr[i]);
-      }
-    }
-  }
-  return duplicates;
-}
-
-// ✅ GOOD: O(n) with Set
-function findDuplicates(arr: number[]): number[] {
-  const seen = new Set<number>();
-  const duplicates = new Set<number>();
-
-  for (const num of arr) {
-    if (seen.has(num)) {
-      duplicates.add(num);
-    }
-    seen.add(num);
-  }
-
-  return Array.from(duplicates);
-}
-```
-
-#### Fix 5: Database Indexing
-
-```sql
--- ❌ BAD: No index on frequently queried column
-SELECT * FROM users WHERE email = 'test@example.com';
--- Seq Scan on users (cost=0.00..3500.00 rows=1 width=100)
-
--- ✅ GOOD: Add index
-CREATE INDEX idx_users_email ON users(email);
--- Index Scan using idx_users_email (cost=0.29..8.31 rows=1 width=100)
-
--- Composite index for multiple columns
-CREATE INDEX idx_posts_user_created ON posts(user_id, created_at DESC);
-```
-
-### Phase 4: Frontend-Specific Optimizations
-
-**React performance patterns:**
-
-```typescript
-// 1. Memoize expensive calculations
-function ExpensiveComponent({ items, filter }) {
-  const filteredItems = useMemo(() => {
-    return items.filter(item => item.category === filter);
-  }, [items, filter]);
-
-  return <List items={filteredItems} />;
-}
-
-// 2. Memoize callbacks
-function ParentComponent() {
-  const [count, setCount] = useState(0);
-
-  const handleClick = useCallback(() => {
-    setCount(c => c + 1);
-  }, []);
-
-  return <ChildComponent onClick={handleClick} />;
-}
-
-// 3. Virtualize long lists
-import { FixedSizeList } from 'react-window';
-
-function VirtualizedList({ items }) {
-  return (
-    <FixedSizeList
-      height={600}
-      itemCount={items.length}
-      itemSize={50}
-      width="100%"
-    >
-      {({ index, style }) => (
-        <div style={style}>{items[index].name}</div>
-      )}
-    </FixedSizeList>
-  );
-}
-
-// 4. Lazy load images
-<img
-  src={imageUrl}
-  loading="lazy"
-  alt="Description"
-/>
-
-// 5. Debounce expensive operations
-const debouncedSearch = useMemo(
-  () => debounce((query: string) => {
-    performSearch(query);
-  }, 300),
-  []
-);
-```
-
-### Phase 5: Backend-Specific Optimizations
-
-**Caching strategies:**
-
-```typescript
-// 1. In-memory cache (LRU)
-import LRU from 'lru-cache';
-
-const cache = new LRU({
-  max: 500,
-  ttl: 1000 * 60 * 5  // 5 minutes
-});
-
-async function getUser(id: string) {
-  const cached = cache.get(id);
-  if (cached) return cached;
-
-  const user = await db.users.findOne({ id });
-  cache.set(id, user);
-  return user;
-}
-
-// 2. Redis cache
-import { redis } from './redis';
-
-async function getCachedData(key: string) {
-  const cached = await redis.get(key);
-  if (cached) return JSON.parse(cached);
-
-  const data = await fetchFromDatabase(key);
-  await redis.set(key, JSON.stringify(data), 'EX', 300);  // 5 min TTL
-  return data;
-}
-
-// 3. HTTP caching headers
-app.get('/api/static-data', (req, res) => {
-  res.set('Cache-Control', 'public, max-age=3600');  // 1 hour
-  res.json(data);
-});
-```
-
-**Connection pooling:**
-
-```typescript
-// ✅ Configure proper pool size
-const pool = new Pool({
-  host: 'localhost',
-  database: 'mydb',
-  max: 20,           // Max connections
-  min: 5,            // Min connections
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
-});
-```
-
 ## 3. Performance Benchmarking
 
 **Use the zero-context script:**
@@ -438,7 +179,29 @@ Memory:
   Average: 38.7 MB
 ```
 
-## 4. Performance Workflow for Agents
+## 4. Common Performance Fixes
+
+**For detailed code examples, see [reference.md](./reference.md):**
+
+- **N+1 Queries**: Single query with JOIN, DataLoader batching
+- **Memory Leaks**: Event listener cleanup, interval clearing
+- **Bundle Size**: Tree-shaking, code splitting, dynamic imports
+- **Inefficient Algorithms**: O(n) over O(n²), using Sets/Maps
+- **Database Indexing**: CREATE INDEX on frequently queried columns
+- **Frontend Optimizations**: Memoization, virtualization, lazy loading
+- **Backend Optimizations**: Caching (LRU, Redis), connection pooling
+
+**Quick reference:**
+
+| Issue | Solution | See Reference |
+| :--- | :--- | :--- |
+| N+1 Queries | JOIN or DataLoader | reference.md §Fix 1 |
+| Memory Leaks | Cleanup in useEffect | reference.md §Fix 2 |
+| Large Bundles | Tree-shaking, code splitting | reference.md §Fix 3 |
+| Slow Algorithms | Use efficient data structures | reference.md §Fix 4 |
+| Slow DB Queries | Add indexes | reference.md §Fix 5 |
+
+## 5. Performance Workflow for Agents
 
 ### When asked to "make it faster" or "optimize":
 
@@ -534,7 +297,7 @@ Verified: All tests still pass
 Agent: "Dashboard optimized. TTI improved from 5.2s to 1.8s (65% faster)."
 ```
 
-## 5. Failed Attempts (Negative Knowledge Evolution)
+## 6. Failed Attempts (Negative Knowledge Evolution)
 
 ### ❌ Attempt: Micro-optimizations without profiling
 **Context:** Replaced forEach with for loops for "performance"
@@ -556,7 +319,7 @@ Agent: "Dashboard optimized. TTI improved from 5.2s to 1.8s (65% faster)."
 **Failure:** Too many HTTP requests, worse performance
 **Learning:** Balance bundle size with HTTP request overhead
 
-## 6. Performance Checklist
+## 7. Performance Checklist
 
 Before marking optimization as complete:
 
@@ -568,63 +331,20 @@ Before marking optimization as complete:
 - [ ] **Documented**: Performance improvement documented
 - [ ] **Acceptable**: Performance now meets requirements
 
-## 7. Performance Budget
+## 8. Extended Tools and Patterns
 
-**Set performance budgets to maintain gains:**
+**For comprehensive tool references and advanced patterns, see [reference.md](./reference.md):**
 
-```json
-{
-  "budgets": [
-    {
-      "resourceSizes": [
-        { "resourceType": "script", "budget": 300 },
-        { "resourceType": "total", "budget": 500 }
-      ],
-      "timings": [
-        { "metric": "interactive", "budget": 3000 },
-        { "metric": "first-contentful-paint", "budget": 1000 }
-      ]
-    }
-  ]
-}
-```
-
-**Fail CI if budgets exceeded:**
-
-```bash
-# In CI/CD pipeline
-npx lighthouse-ci assert \
-  --budgets-file=budgets.json \
-  --preset=lighthouse:recommended
-```
-
-## 8. Tools Reference
-
-**Frontend:**
-- Chrome DevTools Performance tab
-- React DevTools Profiler
-- Lighthouse CI
-- webpack-bundle-analyzer / vite-bundle-visualizer
-
-**Backend:**
-- Node.js --prof / --inspect
-- clinic.js (doctor, flame, bubbleprof)
-- autocannon (load testing)
-- 0x (flamegraph profiler)
-
-**Database:**
-- EXPLAIN ANALYZE (PostgreSQL)
-- EXPLAIN (MySQL)
-- pg_stat_statements
-- Database slow query logs
-
-**General:**
-- Benchmark.js / tinybench
-- Apache Bench (ab)
-- Artillery.io (load testing)
+- **Frontend Tools**: Chrome DevTools, React DevTools, Lighthouse CI, Bundle Analyzers
+- **Backend Tools**: Node.js profilers, clinic.js, autocannon, 0x
+- **Database Tools**: EXPLAIN ANALYZE, pg_stat_statements, slow query logs
+- **Advanced Patterns**: Web Workers, Request Coalescing, Progressive Enhancement
+- **Monitoring**: Core Web Vitals, Custom Performance Marks
+- **Performance Budgets**: CI integration, budget enforcement
 
 ## 9. Governance
-- **Token Budget:** ~495 lines (within 500 limit)
+- **Token Budget:** ~450 lines (within 500 limit)
+- **Extended Reference:** See reference.md for detailed fixes, tools, and patterns
 - **Dependencies:** Node.js profiling tools, Chrome DevTools, database-specific tools
 - **Pattern Origin:** Performance Engineering best practices, Web Vitals
 - **Maintenance:** Update as new profiling tools emerge
