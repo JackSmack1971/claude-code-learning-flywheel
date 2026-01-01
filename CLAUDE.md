@@ -601,3 +601,548 @@ The governance framework closes the behavioral loop:
 5. **System learns and enforces** (next agent session inherits improved constraints)
 
 This is **Institutional Memory with Enforcement** - not just documenting what went wrong, but preventing it from happening again.
+
+---
+
+## 10. Multi-Agent Architecture (Specialized Execution)
+
+**Problem:** As the Learning Flywheel grows, the main agent's context window gets polluted with thousands of lines from skills, scripts, and negative knowledge. This creates "context bloat" that slows down responses and reduces effectiveness.
+
+**Solution:** Specialized sub-agents that operate with isolated context windows and specific tool permissions, each aligned with institutional memory from `.claude/skills/`.
+
+### Architecture Philosophy
+
+The multi-agent system solves the **"context pollution"** problem through modular AI instances:
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                     Main Agent (Orchestrator)                 │
+│  - High-level planning and user communication                 │
+│  - Delegates specialized tasks to sub-agents                  │
+│  - Full tool access (Read, Write, Bash, etc.)                │
+└────────────┬──────────────┬──────────────┬───────────────────┘
+             │              │              │
+             ▼              ▼              ▼
+    ┌────────────┐  ┌────────────┐  ┌────────────┐
+    │ Knowledge  │  │ Standards  │  │   Infra    │
+    │ Explorer   │  │ Enforcer   │  │ Architect  │
+    └────────────┘  └────────────┘  └────────────┘
+```
+
+**Core Principle:** Each sub-agent is a **"muscle memory specialist"** that:
+1. Loads specific skills from `.claude/skills/`
+2. Operates with restricted tool permissions (principle of least privilege)
+3. Returns concise results (<500 tokens) to avoid polluting main context
+4. Compounds expertise through the Learning Flywheel
+
+### The Three Specialists
+
+#### 1. Knowledge Explorer (Flywheel Librarian)
+
+**File:** `.claude/agents/knowledge-explorer.md`
+
+**Purpose:** Research wrapper that prevents context pollution by scanning institutional memory and returning compressed insights.
+
+**When to Use:**
+- Before starting any complex task
+- When planning implementations
+- To check if an approach has failed before
+- To find relevant skills and negative knowledge
+
+**Tool Permissions:** `Read`, `Grep`, `Glob` (read-only for safety)
+
+**Model:** `haiku` (fast, cost-effective for research)
+
+**Skills Loaded:** `code-navigation`
+
+**Key Behavior:**
+- Scans `.claude/skills/` for relevant failure modes
+- Extracts Negative Knowledge tables
+- Returns <100 word summaries instead of full files
+- Provides file:line references for deeper reading
+
+**Example Invocation:**
+```
+User: "Before we refactor auth, check for past failures"
+
+Main Agent: "@knowledge-explorer scan for authentication refactor failures"
+
+Knowledge Explorer:
+🔍 Knowledge Scan: authentication refactor
+
+📚 Relevant Skills:
+- refactor-legacy-code (v1.2.0)
+
+⚠️ Negative Knowledge:
+1. ❌ Don't attempt "Big Bang" rewrites
+   - Past failure: 3-week rewrite abandoned
+   - Fix: Use Strangler Fig pattern
+
+📖 Read: .claude/skills/refactor-legacy-code/SKILL.md:34
+```
+
+**Token Savings:** Instead of loading 2000+ lines from skills → 50-100 token summary
+
+#### 2. Standards Enforcer (Strict Reviewer)
+
+**File:** `.claude/agents/standards-enforcer.md`
+
+**Purpose:** Quality gatekeeper that validates implementations against project skills and extracts retrospectives after failures.
+
+**When to Use:**
+- After significant code changes (>100 lines)
+- Before git commits on critical files
+- To extract retrospectives after task failures
+- To validate against architectural standards
+
+**Tool Permissions:** `Read`, `Bash`, `Grep`, `Glob` (can execute validation scripts)
+
+**Model:** `sonnet` (balanced for analysis and review)
+
+**Skills Loaded:** `pr-review-standards`, `git-commit-standards`, `test-driven-workflow`
+
+**Key Behavior:**
+- Enforces "Negative Knowledge First" principle
+- Runs validation scripts (`validate_memory.py`, `pre_commit_governance.py`)
+- Rejects implementations that match documented failures
+- Generates structured JSON for `auto_retro.py`
+
+**Review Rubric:**
+- Security vulnerabilities (auto-reject)
+- Negative Knowledge violations (auto-reject)
+- Test coverage <70% (auto-reject)
+- Governance violations (auto-reject)
+
+**Example Invocation:**
+```
+User: "Review this API endpoint implementation"
+
+Main Agent: "@standards-enforcer review api/routes/payments.py"
+
+Standards Enforcer:
+🛡️ Standards Review: api/routes/payments.py
+
+❌ VIOLATIONS (1):
+1. ❌ Missing input validation on amount parameter
+   - Location: api/routes/payments.py:67
+   - Security risk: Negative amounts could bypass logic
+   - Fix: Add amount > 0 validation
+
+✅ PASSED (4):
+- Layered architecture ✓
+- Test coverage 85% ✓
+
+🚫 VERDICT: REJECTED - Fix validation first
+```
+
+**Context Isolation:** Review happens in sub-agent context, only verdict returned to main agent
+
+#### 3. Infrastructure Architect (Tool Specialist)
+
+**File:** `.claude/agents/infra-architect.md`
+
+**Purpose:** Operational safety specialist for database migrations, deployments, and cloud infrastructure changes.
+
+**When to Use:**
+- Database migrations
+- Infrastructure-as-code changes (Terraform, etc.)
+- CI/CD pipeline setup
+- Dependency security audits
+- Production deployments
+
+**Tool Permissions:** `Read`, `Write`, `Bash`, `Grep`, `Glob` (full access for infrastructure)
+
+**Model:** `sonnet` (requires precision for production safety)
+
+**Skills Loaded:** `database-migration-safe`, `audit-security-dependencies`
+
+**Key Behavior:**
+- Runs pre-flight safety checks before any infrastructure change
+- Validates migrations for data loss, downtime, and rollback capability
+- Enforces backup-first policy for destructive operations
+- Knows complex CLI tool flags (Terraform, kubectl, Alembic)
+
+**Safety Guardrails:**
+```yaml
+Critical (Auto-Reject):
+  - DROP TABLE without backup
+  - terraform destroy on production
+  - Dependency updates without tests
+  - Deploy on Friday afternoon
+
+Warning (Require Approval):
+  - Schema changes on tables >1M rows
+  - Multi-region deployments
+  - Breaking API changes
+```
+
+**Example Invocation:**
+```
+User: "Add a column to users table"
+
+Main Agent: "@infra-architect analyze database migration for users table"
+
+Infra Architect:
+🏗️ Infrastructure Analysis: Database Migration
+
+📊 Current State:
+- Table: users (3.2M rows)
+- Database: PostgreSQL 14.5
+
+✅ Safety Checks:
+1. ✅ Backward compatible (nullable column, no rewrite)
+2. ⚠️ Lock duration: <100ms (metadata-only)
+3. ✅ Rollback plan: ALTER TABLE users DROP COLUMN
+
+🚦 APPROVED - Safe to execute
+```
+
+### Agent Discovery and Invocation
+
+**Automatic Delegation:**
+Claude Code evaluates task descriptions and automatically invokes relevant agents based on trigger keywords in the `description` field.
+
+**Trigger Keywords by Agent:**
+
+| Agent | Auto-Invoke Keywords |
+|-------|---------------------|
+| `knowledge-explorer` | "check skills", "past failures", "negative knowledge", "before we start" |
+| `standards-enforcer` | "review code", "validate", "retrospective", "quality check" |
+| `infra-architect` | "migration", "deploy", "infrastructure", "database", "terraform" |
+
+**Manual Invocation:**
+```bash
+# Via @ mention
+@knowledge-explorer scan for API design patterns
+
+# Via explicit request
+Hey standards-enforcer, review this implementation
+```
+
+**Programmatic (from main agent):**
+```python
+# Main agent delegates to sub-agent
+result = invoke_agent("knowledge-explorer", "scan for refactor failures")
+```
+
+### Integration with Learning Flywheel
+
+The multi-agent architecture enhances the flywheel loop:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    LEARNING FLYWHEEL                         │
+│                                                              │
+│  1. Knowledge Explorer → Surfaces past failures             │
+│     ↓                                                        │
+│  2. Main Agent → Implements with awareness                  │
+│     ↓                                                        │
+│  3. Standards Enforcer → Validates against skills           │
+│     ↓                                                        │
+│  4. If failure → Extract retrospective (auto_retro.py)      │
+│     ↓                                                        │
+│  5. Skill updated → Next iteration avoids same mistake      │
+│     ↓                                                        │
+│  6. Governance hooks → Prevent regression                   │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Before (Single Agent):**
+- Main agent loads all skills into context (30k+ tokens)
+- Context polluted with irrelevant details
+- Slower responses, reduced effectiveness
+- No specialized expertise
+
+**After (Multi-Agent):**
+- Knowledge Explorer pre-filters relevant skills (100 tokens)
+- Main agent focuses on implementation
+- Standards Enforcer validates in isolated context
+- Specialized expertise per domain
+
+### Best Practices
+
+**1. Flat Hierarchy (Prevent Recursion)**
+
+Only the main agent can invoke sub-agents. Sub-agents CANNOT invoke other sub-agents.
+
+```
+✅ CORRECT:
+Main Agent → Knowledge Explorer → Returns result
+Main Agent → Standards Enforcer → Returns result
+
+❌ WRONG:
+Main Agent → Standards Enforcer → Knowledge Explorer (infinite loop risk)
+```
+
+**2. Concise Responses**
+
+Sub-agents MUST return <500 token summaries to avoid re-polluting main context.
+
+**Format:**
+```
+🎯 [Agent Icon] [Task Summary]
+
+✅ Key Findings (3 max):
+- Finding 1
+- Finding 2
+- Finding 3
+
+📖 References:
+- file.md:line
+```
+
+**3. Tool Scoping (Principle of Least Privilege)**
+
+Grant sub-agents only the tools they need:
+
+```yaml
+knowledge-explorer:
+  tools: Read, Grep, Glob  # Read-only
+
+standards-enforcer:
+  tools: Read, Bash, Grep, Glob  # + Bash for validation scripts
+
+infra-architect:
+  tools: Read, Write, Bash, Grep, Glob  # Full access (needs to modify infra)
+```
+
+**4. Model Selection**
+
+Choose the right model for the task:
+
+```yaml
+knowledge-explorer:
+  model: haiku  # Fast, cheap for research
+
+standards-enforcer:
+  model: sonnet  # Balanced for code review
+
+infra-architect:
+  model: sonnet  # Precision for production safety
+```
+
+**5. Skill Integration**
+
+Load relevant skills automatically via the `skills` field:
+
+```yaml
+---
+name: standards-enforcer
+skills: pr-review-standards, git-commit-standards, test-driven-workflow
+---
+```
+
+This ensures the sub-agent has access to institutional memory without manual context loading.
+
+### Workflow Examples
+
+#### Example 1: Refactoring with Knowledge Scan
+
+```
+User: "Refactor the authentication system"
+
+Main Agent:
+"This is a complex task. Let me consult our institutional memory first."
+→ Invokes @knowledge-explorer
+
+Knowledge Explorer:
+"🔍 Found 2 relevant failures in refactor-legacy-code skill:
+1. Don't attempt Big Bang rewrites (use Strangler Fig)
+2. Don't refactor without tests (write characterization tests first)"
+
+Main Agent:
+"Based on negative knowledge, I'll use Strangler Fig pattern:
+1. Write tests for current auth behavior
+2. Create new auth module alongside old one
+3. Migrate routes incrementally"
+→ Implements refactor
+
+Main Agent:
+"Implementation complete. Let me validate against standards."
+→ Invokes @standards-enforcer
+
+Standards Enforcer:
+"🛡️ APPROVED: Test coverage 87%, follows Strangler Fig pattern"
+
+Main Agent: "Refactor complete and validated ✓"
+```
+
+**Token Savings:** ~20k tokens (didn't load full skills into main context)
+
+#### Example 2: Database Migration with Safety Checks
+
+```
+User: "Add indexes to improve query performance"
+
+Main Agent:
+"This is an infrastructure change. Delegating to specialist."
+→ Invokes @infra-architect
+
+Infra Architect:
+"🏗️ Safety Analysis:
+- Table: orders (8M rows)
+- Index creation will lock table
+- Estimated duration: 15 minutes
+- ⚠️ RECOMMENDATION: Use CONCURRENTLY flag (PostgreSQL)
+
+Proposed migration:
+CREATE INDEX CONCURRENTLY idx_orders_user_id ON orders(user_id);
+
+✅ APPROVED with CONCURRENTLY flag"
+
+Main Agent: "Migration plan approved. Creating migration file..."
+→ Writes migration
+→ Invokes @standards-enforcer for final review
+
+Standards Enforcer:
+"✅ PASSED: Migration has rollback (DROP INDEX), uses CONCURRENTLY"
+
+Main Agent: "Migration ready to apply ✓"
+```
+
+**Safety Achieved:** Infrastructure specialist caught lock issue, suggested fix
+
+#### Example 3: Failed Task + Retrospective
+
+```
+User: "Implement feature X"
+
+Main Agent: [Attempts implementation, encounters error]
+
+Main Agent:
+"Implementation failed. Extracting retrospective."
+→ Invokes @standards-enforcer in retrospective mode
+
+Standards Enforcer:
+"Generating retrospective JSON:
+{
+  'target_skill': '.claude/skills/test-driven-workflow/SKILL.md',
+  'negative_knowledge': [{
+    'attempt': 'Wrote implementation before tests',
+    'failure': 'Integration broke, no way to verify fix',
+    'cost': '2 hours debugging',
+    'fix': 'Follow TDD: Red-Green-Refactor cycle'
+  }]
+}
+
+Merging into skill..."
+→ Executes: python scripts/auto_retro.py --input /tmp/retro.json
+
+Main Agent: "Retrospective extracted. Skill updated with new failure mode."
+```
+
+**Learning Loop Closed:** Next session will load updated skill, avoid same mistake
+
+### Metrics & Success Indicators
+
+**How to measure multi-agent effectiveness:**
+
+| Metric | Measurement | Target |
+|--------|-------------|--------|
+| **Context Efficiency** | Tokens used per task | 30% reduction vs single agent |
+| **Task Delegation Rate** | % of tasks using sub-agents | >50% for complex tasks |
+| **Failure Prevention** | Tasks that avoid documented failures | >90% (knowledge-explorer effectiveness) |
+| **Review Coverage** | % of commits validated by standards-enforcer | 100% for critical paths |
+| **Production Incidents** | Infra changes causing downtime | 0 (infra-architect safety) |
+
+**Dashboard Queries:**
+
+```bash
+# Count agent invocations (look for agent mentions in git history)
+git log --all --oneline | grep -E "@knowledge-explorer|@standards-enforcer|@infra-architect" | wc -l
+
+# Measure context savings (compare token usage before/after multi-agent)
+# (Requires instrumentation in Claude Code)
+
+# Track failure prevention (negative knowledge matches)
+grep -r "Negative Knowledge" .claude/skills/ | wc -l
+```
+
+### Extension Opportunities
+
+**Future Agents to Consider:**
+
+1. **Test Automation Specialist**
+   - Skills: `test-driven-workflow`
+   - Tools: `Read`, `Write`, `Bash`
+   - Purpose: Generate and execute test suites
+
+2. **Security Auditor**
+   - Skills: `audit-security-dependencies`
+   - Tools: `Read`, `Bash`
+   - Purpose: Scan for vulnerabilities, OWASP compliance
+
+3. **Performance Optimizer**
+   - Skills: `optimize-performance-profiling`
+   - Tools: `Read`, `Bash`
+   - Purpose: Profile-first optimization workflow
+
+4. **Documentation Writer**
+   - Skills: Custom documentation standards
+   - Tools: `Read`, `Write`
+   - Purpose: Generate and maintain technical docs
+
+**Adding a New Agent:**
+
+1. Create agent definition: `.claude/agents/[agent-name].md`
+2. Define frontmatter (name, description, tools, skills)
+3. Write agent instructions (expertise, patterns, negative knowledge)
+4. Update `CLAUDE.md` section 10 with agent details
+5. Test with manual invocation: `@agent-name task description`
+6. Monitor effectiveness and refine
+
+### Limitations and Tradeoffs
+
+**Limitations:**
+
+1. **Communication Overhead:** Sub-agent invocation adds latency (network roundtrip)
+2. **Context Boundaries:** Sub-agents can't access main agent's working memory
+3. **No Cross-Agent Communication:** Agents can't collaborate directly (only via main agent)
+4. **Token Budget:** Each agent invocation counts against session limit
+
+**Tradeoffs:**
+
+| Benefit | Cost |
+|---------|------|
+| Reduced context pollution | Invocation latency |
+| Specialized expertise | More complex orchestration |
+| Parallel execution (future) | Harder to debug |
+| Scoped tool permissions | Potential bottlenecks |
+
+**When NOT to Use Sub-Agents:**
+
+- Simple tasks (<50 lines of code)
+- Tasks already well-understood by main agent
+- Tight latency requirements
+- Low token budget remaining
+
+**Decision Matrix:**
+
+```
+┌─────────────────────────┬──────────────┬──────────────┐
+│ Task Complexity         │ Context Size │ Use Agent?   │
+├─────────────────────────┼──────────────┼──────────────┤
+│ Simple (<50 lines)      │ Small        │ ❌ No        │
+│ Simple (<50 lines)      │ Large        │ ✅ Yes       │
+│ Complex (>100 lines)    │ Small        │ ⚠️ Maybe     │
+│ Complex (>100 lines)    │ Large        │ ✅ Yes       │
+└─────────────────────────┴──────────────┴──────────────┘
+```
+
+### Conclusion
+
+The multi-agent architecture transforms the Claude Code Learning Flywheel from a single "amnesiac athlete" into a **specialized team with institutional memory**:
+
+- **Knowledge Explorer** prevents repeating past failures
+- **Standards Enforcer** ensures quality through validation
+- **Infrastructure Architect** prevents production incidents
+
+Each agent compounds expertise through the flywheel loop, creating a system where AI "muscle memory" improves over time without polluting the main context window.
+
+**Next Steps:**
+
+1. Test agents with manual invocations: `@agent-name task`
+2. Monitor token usage and context efficiency
+3. Extract retrospectives when agents fail (feed back into skills)
+4. Extend with additional specialists as patterns emerge
