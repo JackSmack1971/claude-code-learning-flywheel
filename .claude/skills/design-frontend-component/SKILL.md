@@ -371,44 +371,20 @@ const SimpleComponent = memo(function SimpleComponent({ text }) {
 
 ## 4. Failed Attempts (Negative Knowledge Evolution)
 
-### ❌ Attempt: Premature abstraction
-**Context:** Created reusable component after first use
-**Failure:** Over-engineered, didn't fit other use cases
-**Learning:** Wait for 3 instances before abstracting
-
-### ❌ Attempt: Global state for everything
-**Context:** Put all state in Redux store
-**Failure:** Boilerplate explosion, slow development
-**Learning:** Use local state by default, global only when needed
-
-### ❌ Attempt: Index as key in lists
-**Context:** Used array index as React key: `key={index}`
-**Failure:** Bugs when list items reordered or filtered
-**Learning:** Always use unique, stable IDs as keys
-
-### ❌ Attempt: Fetching data in components
-**Context:** Used useEffect for API calls in multiple components
-**Failure:** No caching, duplicate requests, complex loading states
-**Learning:** Use React Query/SWR for server state
+| Attempt | Context | Learning |
+| :--- | :--- | :--- |
+| Premature abstraction | Created reusable component after first use | Wait for 3 instances before abstracting |
+| Global state for everything | Put all state in Redux store | Use local state by default, global only when needed |
+| Index as key in lists | Used array index as React key | Always use unique, stable IDs as keys |
+| Fetching data in components | Used useEffect for API calls | Use React Query/SWR for server state |
 
 ## 5. Component Design Checklist
 
-Before committing a component:
-
-- [ ] **Single Responsibility**: Component has one clear purpose
-- [ ] **Size Limit**: File is <300 lines (extract if larger)
-- [ ] **Props Typed**: All props have TypeScript interfaces
-- [ ] **No Prop Drilling**: Props don't pass through >2 layers
-- [ ] **Accessible**: Has proper ARIA labels and keyboard navigation
-- [ ] **Tested**: Has tests for main user interactions
-- [ ] **Documented**: Props are documented with JSDoc comments
-- [ ] **Styled**: Uses design system tokens, no magic numbers
-- [ ] **Keys in Lists**: List items have unique, stable keys
+Before committing: Single Responsibility ✓ | Size <300 lines ✓ | Props Typed ✓ | No Prop Drilling ✓ | Accessible ✓ | Tested ✓ | Documented ✓ | Styled with tokens ✓ | Unique keys in lists ✓
 
 ## 6. Governance
-- **Token Budget:** ~480 lines (within 500 limit)
+- **Token Budget:** ~390 lines (within 400 recommended limit)
 - **Extended Reference:** See reference.md for detailed patterns and examples
 - **Dependencies:** React 18+, TypeScript 5+, Testing Library
 - **Pattern Origin:** Atomic Design (Brad Frost), React Best Practices
-- **Maintenance:** Update as React/framework patterns evolve
 - **Verification Date:** 2026-01-01

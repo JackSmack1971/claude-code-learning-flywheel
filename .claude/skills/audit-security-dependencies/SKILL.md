@@ -291,101 +291,25 @@ Does it add <100KB to bundle size?
 └─ YES → Safe to add (still run audit)
 ```
 
-## 5. Common Scenarios
+## 5. Extended Scenarios and Package Lists
 
-### Scenario 1: Security Alert in Production
+**For detailed scenarios and command examples, see [reference.md](./reference.md):**
 
-```bash
-# 1. Assess impact
-npm audit --production
+- **Scenario 1**: Security Alert in Production - Assess, test, deploy urgently
+- **Scenario 2**: No Safe Version Available - Find alternatives, vendor, or fork
+- **Scenario 3**: Dependency Conflict - Resolve peer dependency issues
 
-# 2. Check if vulnerability affects your usage
-# Read CVE details carefully
-
-# 3. Test fix in development
-git checkout -b fix/security-vulnerability
-npm audit fix
-
-# 4. Run full test suite
-npm test
-
-# 5. Deploy fix urgently
-git commit -m "security: fix CVE-2024-XXXXX in package-name"
-git push
-# Create PR with "security" label for expedited review
-```
-
-### Scenario 2: No Safe Version Available
-
-```bash
-# Option 1: Find alternative package
-npm uninstall vulnerable-package
-npm install safe-alternative
-
-# Option 2: Vendor the code (if small enough)
-mkdir -p vendor/package-name
-cp -r node_modules/package-name/src vendor/package-name
-# Update imports to use vendored version
-
-# Option 3: Fork and patch
-git clone https://github.com/author/package-name
-cd package-name
-# Apply security fix
-# Publish to npm under @your-org/package-name
-```
-
-### Scenario 3: Dependency Conflict
-
-```bash
-# Check dependency tree
-npm ls <package-name>
-
-# If peer dependency conflict:
-npm install --legacy-peer-deps  # temporary workaround
-
-# Better solution: Update packages to compatible versions
-npm install package-a@latest package-b@latest
-```
-
-## 6. Approved Package Lists
-
-**Utility libraries (prefer these over adding new ones):**
-
-- **Date/Time:** `date-fns` (not moment.js - unmaintained)
-- **HTTP Client:** `axios` or native `fetch`
-- **Validation:** `zod` or `yup`
-- **Testing:** `vitest` or `jest`
-- **Logging:** `pino` or `winston`
-
-**Red flags (avoid these):**
-
-- Packages with `eval()` or `Function()` in their code
-- Packages requesting unnecessary permissions
-- Typosquatting variations of popular packages
-- Packages with obfuscated code
-- Newly created packages with high version numbers (v10.0.0 on day 1)
+**Approved packages:** date-fns, zod, vitest, pino (see reference.md for full list)
+**Red flags:** Packages with eval(), obfuscated code, or typosquatting (see reference.md)
 
 ## 7. Failed Attempts (Negative Knowledge Evolution)
 
-### ❌ Attempt: Auto-update all dependencies weekly
-**Context:** Set up automated PRs to update all deps
-**Failure:** Breaking changes broke production 3 times
-**Learning:** Update dependencies deliberately, read changelogs
-
-### ❌ Attempt: Ignore low severity CVEs
-**Context:** Only fixed high/critical vulnerabilities
-**Failure:** Low severity CVEs were chained for exploit
-**Learning:** Fix all CVEs, not just high severity
-
-### ❌ Attempt: Add packages for single functions
-**Context:** Installed `is-even` for a single check
-**Failure:** Added 5 dependencies for 1 line of code
-**Learning:** Write simple utilities yourself
-
-### ❌ Attempt: Use wildcard versions
-**Context:** Set `"express": "*"` in package.json
-**Failure:** Got major version update, broke app
-**Learning:** Always pin versions, use exact or ~tilde
+| Attempt | Context | Learning |
+| :--- | :--- | :--- |
+| Auto-update all deps weekly | Automated PRs broke production 3x | Update deliberately, read changelogs |
+| Ignore low severity CVEs | Only fixed high/critical | Fix all CVEs, they can be chained |
+| Add packages for single functions | Installed is-even, added 5 deps | Write simple utilities yourself |
+| Use wildcard versions | Set "*" in package.json | Always pin versions, use exact or ~tilde |
 
 ## 8. Security Checklist
 
@@ -402,40 +326,16 @@ Before committing dependency changes:
 
 ## 9. Tools & Commands Reference
 
-```bash
-# Check for vulnerabilities
-npm audit
-npm audit --production  # Only production deps
+**For comprehensive command references, see [reference.md](./reference.md):**
 
-# Fix vulnerabilities
-npm audit fix
-npm audit fix --force  # Apply breaking changes (risky)
-
-# Check outdated packages
-npm outdated
-
-# Check package info
-npm view <package> versions
-npm view <package> repository
-npm view <package> license
-
-# Analyze bundle size
-npx bundlephobia <package>@<version>
-
-# Check for unused dependencies
-npx depcheck
-
-# Verify lockfile integrity
-npm ci  # Clean install from lockfile
-
-# List dependency tree
-npm ls
-npm ls --depth=0  # Top-level only
-npm ls <package>  # Where is this package used?
-```
+- NPM: `npm audit`, `npm audit fix`, `npm outdated`, `npm view <package>`
+- Yarn: `yarn audit`, `yarn upgrade-interactive`, `yarn why <package>`
+- pnpm: `pnpm audit`, `pnpm update`, `pnpm why <package>`
+- Python: `pip-audit`, `pip list --outdated`, `pip show <package>`
+- Security Scanners: snyk, Socket.dev, npm-check, bundlephobia
 
 ## 10. Governance
-- **Token Budget:** ~490 lines (within 500 limit)
+- **Token Budget:** ~390 lines (within 400 recommended limit)
 - **Dependencies:** Python 3.8+ for CVE checking script, npm/pip
 - **Pattern Origin:** OWASP Top 10, Supply Chain Security Best Practices
 - **Maintenance:** Update vulnerability patterns monthly

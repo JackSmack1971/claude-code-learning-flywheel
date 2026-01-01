@@ -49,46 +49,12 @@ Prevent "Big Bang" rewrites that are impossible to review and inevitably introdu
 # Check current test coverage
 npm test -- --coverage
 
-# Identify gaps in coverage for the target area
 # Target: 80%+ coverage for code you'll refactor
 ```
 
-**If tests are missing, add them FIRST:**
-
-```typescript
-// tests/unit/services/LegacyUserService.test.ts
-describe('LegacyUserService (baseline tests)', () => {
-  it('should create user with existing behavior', async () => {
-    // Document current behavior, even if flawed
-    const service = new LegacyUserService();
-    const user = await service.createUser({
-      name: 'Test',
-      email: 'test@example.com'
-    });
-
-    expect(user).toMatchObject({
-      name: 'Test',
-      email: 'test@example.com'
-    });
-  });
-
-  // Test ALL current behaviors, including quirks
-  it('should handle empty name (current behavior)', async () => {
-    const service = new LegacyUserService();
-    const user = await service.createUser({
-      name: '',
-      email: 'test@example.com'
-    });
-
-    // Document that current code allows empty names
-    expect(user.name).toBe('');
-  });
-});
-```
+If tests are missing, add baseline tests FIRST to document current behavior (even if flawed). See [reference.md](./reference.md) for baseline test examples.
 
 ### Phase 2: Identify Code Smells
-
-**Common smells to target:**
 
 | Code Smell | Example | Refactoring |
 | :--- | :--- | :--- |
@@ -104,125 +70,17 @@ describe('LegacyUserService (baseline tests)', () => {
 
 **Rule:** Each refactoring step must keep tests green.
 
-#### Example: Extract Method Refactoring
+**Workflow for each step:**
+1. Apply ONE refactoring technique (e.g., Extract Method)
+2. Run tests → Verify all tests PASS
+3. Commit with message: `refactor: <specific change>`
+4. Repeat for next refactoring
 
-**BEFORE (Long Method):**
-```typescript
-// src/services/OrderService.ts
-class OrderService {
-  async processOrder(orderId: string) {
-    // 80 lines of code doing everything...
-    const order = await db.orders.findOne({ id: orderId });
-
-    // Validate order (15 lines)
-    if (!order) throw new Error('Order not found');
-    if (order.status !== 'pending') throw new Error('Invalid status');
-    if (order.items.length === 0) throw new Error('Empty order');
-
-    // Calculate total (20 lines)
-    let total = 0;
-    for (const item of order.items) {
-      const price = await this.getItemPrice(item.id);
-      const discount = this.calculateDiscount(item, order.customer);
-      total += price * item.quantity - discount;
-    }
-
-    // Process payment (25 lines)
-    const payment = await this.paymentGateway.charge({
-      amount: total,
-      customerId: order.customerId,
-      currency: 'USD'
-    });
-
-    // Update inventory (20 lines)
-    for (const item of order.items) {
-      await db.inventory.decrement(item.id, item.quantity);
-    }
-
-    return { orderId, payment, total };
-  }
-}
-```
-
-**STEP 1: Extract validation method**
-```typescript
-class OrderService {
-  async processOrder(orderId: string) {
-    const order = await db.orders.findOne({ id: orderId });
-    this.validateOrder(order);  // Extracted
-
-    // ... rest of the code unchanged
-  }
-
-  private validateOrder(order: Order | null): asserts order is Order {
-    if (!order) throw new Error('Order not found');
-    if (order.status !== 'pending') throw new Error('Invalid status');
-    if (order.items.length === 0) throw new Error('Empty order');
-  }
-}
-```
-
-**Run tests:**
-```bash
-npm test -- OrderService.test.ts
-# Expected: PASS (all green)
-```
-
-**Commit:**
-```bash
-git add src/services/OrderService.ts
-git commit -m "refactor: extract order validation to separate method"
-```
-
-**STEP 2: Extract total calculation**
-```typescript
-class OrderService {
-  async processOrder(orderId: string) {
-    const order = await db.orders.findOne({ id: orderId });
-    this.validateOrder(order);
-
-    const total = await this.calculateOrderTotal(order);  // Extracted
-
-    // ... payment and inventory code
-  }
-
-  private async calculateOrderTotal(order: Order): Promise<number> {
-    let total = 0;
-    for (const item of order.items) {
-      const price = await this.getItemPrice(item.id);
-      const discount = this.calculateDiscount(item, order.customer);
-      total += price * item.quantity - discount;
-    }
-    return total;
-  }
-}
-```
-
-**Run tests → Commit → Continue...**
-
-**AFTER (final state):**
-```typescript
-class OrderService {
-  async processOrder(orderId: string) {
-    const order = await this.getAndValidateOrder(orderId);
-    const total = await this.calculateOrderTotal(order);
-    const payment = await this.processPayment(order, total);
-    await this.updateInventory(order);
-
-    return { orderId, payment, total };
-  }
-
-  // Each extracted method is small, focused, testable
-  private async getAndValidateOrder(orderId: string): Promise<Order> { ... }
-  private async calculateOrderTotal(order: Order): Promise<number> { ... }
-  private async processPayment(order: Order, total: number): Promise<Payment> { ... }
-  private async updateInventory(order: Order): Promise<void> { ... }
-}
-```
+**See [reference.md](./reference.md) for detailed Extract Method example.**
 
 ### Phase 4: The Strangler Fig Migration
 
-**Use when replacing entire modules or systems:**
+Use when replacing entire modules or systems:
 
 ```
 Old System (Legacy)
@@ -231,146 +89,24 @@ Old System (Legacy)
     ↓         ↓
   Old Code  New Code
     ↓         ↓
-  Gradually migrate traffic →
+  Gradually migrate traffic (10% → 50% → 100%)
 ```
 
-**Example: Replacing legacy authentication**
+**Key steps:**
+1. Create facade that routes to old OR new implementation
+2. Route all calls through facade
+3. Gradually increase percentage to new implementation
+4. Remove old code when 100% proven
 
-**STEP 1: Create facade**
-```typescript
-// src/services/AuthService.ts (new facade)
-export class AuthService {
-  private legacyAuth = new LegacyAuthService();
-  private newAuth = new ModernAuthService();
+**See [reference.md](./reference.md) for complete auth migration example.**
 
-  async authenticate(credentials: Credentials): Promise<User> {
-    // Feature flag to gradually shift traffic
-    if (await this.shouldUseNewAuth(credentials.userId)) {
-      return this.newAuth.authenticate(credentials);
-    }
-    return this.legacyAuth.authenticate(credentials);
-  }
+### Phase 5: Common Refactoring Techniques
 
-  private async shouldUseNewAuth(userId: string): Promise<boolean> {
-    // Gradual rollout: 10% → 50% → 100%
-    const rolloutPercentage = await this.config.get('new_auth_rollout');
-    const userHash = hashUserId(userId);
-    return userHash % 100 < rolloutPercentage;
-  }
-}
-```
+**For detailed code examples, see [reference.md](./reference.md):**
 
-**STEP 2: Route all calls through facade**
-```typescript
-// Before: Direct legacy calls
-const user = await legacyAuth.authenticate(creds);
-
-// After: Through facade
-const user = await authService.authenticate(creds);
-```
-
-**STEP 3: Increase rollout percentage**
-```
-Week 1: 10% of users on new system
-Week 2: 25% of users
-Week 3: 50% of users
-Week 4: 100% of users
-```
-
-**STEP 4: Remove legacy code**
-```typescript
-// Once new system is proven at 100%
-export class AuthService {
-  private auth = new ModernAuthService();
-
-  async authenticate(credentials: Credentials): Promise<User> {
-    return this.auth.authenticate(credentials);
-  }
-}
-```
-
-### Phase 5: Refactoring Catalog
-
-**Common refactoring techniques (apply atomically):**
-
-#### Extract Function
-```typescript
-// Before
-function processUser(user) {
-  if (user.age < 18 || user.age > 120) throw new Error('Invalid age');
-  // ... more code
-}
-
-// After
-function processUser(user) {
-  validateAge(user.age);
-  // ... more code
-}
-
-function validateAge(age: number) {
-  if (age < 18 || age > 120) throw new Error('Invalid age');
-}
-```
-
-#### Introduce Parameter Object
-```typescript
-// Before
-function createUser(name: string, email: string, age: number, country: string, timezone: string) {
-  // ...
-}
-
-// After
-interface UserParams {
-  name: string;
-  email: string;
-  age: number;
-  country: string;
-  timezone: string;
-}
-
-function createUser(params: UserParams) {
-  // ...
-}
-```
-
-#### Replace Conditional with Polymorphism
-```typescript
-// Before
-class PaymentProcessor {
-  process(payment: Payment) {
-    switch (payment.type) {
-      case 'credit_card':
-        return this.processCreditCard(payment);
-      case 'paypal':
-        return this.processPaypal(payment);
-      case 'crypto':
-        return this.processCrypto(payment);
-    }
-  }
-}
-
-// After
-interface PaymentMethod {
-  process(payment: Payment): Promise<Result>;
-}
-
-class CreditCardPayment implements PaymentMethod { ... }
-class PaypalPayment implements PaymentMethod { ... }
-class CryptoPayment implements PaymentMethod { ... }
-
-class PaymentProcessor {
-  private methods: Map<string, PaymentMethod> = new Map([
-    ['credit_card', new CreditCardPayment()],
-    ['paypal', new PaypalPayment()],
-    ['crypto', new CryptoPayment()],
-  ]);
-
-  process(payment: Payment) {
-    const method = this.methods.get(payment.type);
-    return method.process(payment);
-  }
-}
-```
+- **Extract Function**: Pull out repeated or complex logic
+- **Introduce Parameter Object**: Replace long param lists with object
+- **Replace Conditional with Polymorphism**: Replace switch statements with strategy pattern
 
 ## 3. Refactoring Workflow for Agents
 
@@ -432,7 +168,7 @@ Output: UserService has 85% coverage ✓
 
 [IDENTIFY SMELL]
 Agent: Identified code smell: Long Method (createUser is 80 lines)
-Plan: Extract validation, extraction, and persistence logic
+Plan: Extract validation, hashing, and persistence logic
 
 [STEP 1: Extract validation]
 Agent: Extracting validateUserInput method...
@@ -461,7 +197,7 @@ Agent: "Refactoring complete. UserService is now 180 lines with focused methods.
 
 ### ❌ Attempt: Fix bugs while refactoring
 **Context:** Found bugs during refactor, fixed them in same commit
-**Failure:** Couldn't tell if new tests failures were from bugs or refactor
+**Failure:** Couldn't tell if new test failures were from bugs or refactor
 **Learning:** Separate refactoring commits from bug fix commits
 
 ### ❌ Attempt: Delete "useless" comments
@@ -493,7 +229,8 @@ Before marking refactoring as complete, verify:
 - [ ] **Peer Reviewable**: Each commit is small enough to review
 
 ## 6. Governance
-- **Token Budget:** ~490 lines (within 500 limit)
+- **Token Budget:** ~330 lines (within 400 recommended limit)
+- **Extended Reference:** See reference.md for detailed code examples and patterns
 - **Dependencies:** None (pure refactoring techniques)
 - **Pattern Origin:** Martin Fowler's "Refactoring" book, Strangler Fig pattern
 - **Maintenance:** Update catalog as new patterns emerge
