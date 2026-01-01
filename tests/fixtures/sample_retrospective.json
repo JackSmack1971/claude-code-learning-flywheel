@@ -1,0 +1,18 @@
+{
+  "target_skill": ".claude/skills/git-commit-standards/SKILL.md",
+  "version_bump": "patch",
+  "negative_knowledge": [
+    {
+      "attempt": "Used grep -r to search for commit message patterns",
+      "failure": "Returned 500+ false positives from node_modules",
+      "cost": "15k tokens wasted on noise",
+      "fix": "Use cclsp definition <symbol> for precise lookups"
+    },
+    {
+      "attempt": "Implemented commit validation in chat using inline Python",
+      "failure": "Code lost after session ended, no persistence",
+      "cost": "30 minutes of work discarded",
+      "fix": "Write Zero-Context Script in scripts/ directory first"
+    }
+  ]
+}
