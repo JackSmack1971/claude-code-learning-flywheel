@@ -74,6 +74,24 @@ class ValidationResult:
             print("  ✅ Valid")
 
 
+def safe_relative_path(path: Path, base: Optional[Path] = None) -> Path:
+    """Safely compute relative path, falling back to resolved path if needed.
+
+    This prevents ValueError when paths don't share a common ancestor
+    or when mixing relative and absolute paths.
+    """
+    try:
+        # Resolve both paths to absolute
+        abs_path = path.resolve()
+        abs_base = (base or Path.cwd()).resolve()
+
+        # Try to compute relative path
+        return abs_path.relative_to(abs_base)
+    except ValueError:
+        # Paths don't share common ancestor - return resolved path
+        return path.resolve()
+
+
 def get_git_file_content(file_path: Path, ref: str = 'HEAD') -> Optional[str]:
     """Get file content from git at a specific ref (commit/branch)."""
     try:
@@ -245,12 +263,8 @@ def extract_frontmatter(content: str) -> Tuple[Dict, str]:
 
 def validate_skill_file(file_path: Path) -> ValidationResult:
     """Validate a single SKILL.md file."""
-    # Handle both absolute and relative paths
-    try:
-        rel_path = file_path.relative_to(Path.cwd())
-    except ValueError:
-        # Already relative or different base
-        rel_path = file_path
+    # Handle both absolute and relative paths safely
+    rel_path = safe_relative_path(file_path)
     result = ValidationResult(str(rel_path))
 
     # Read file
@@ -315,11 +329,8 @@ def validate_skill_file(file_path: Path) -> ValidationResult:
         else:
             # Check if Negative Knowledge changed without version bump
             try:
-                # Get relative path for git
-                try:
-                    git_path = file_path.relative_to(Path.cwd())
-                except ValueError:
-                    git_path = file_path
+                # Get relative path for git (safely)
+                git_path = safe_relative_path(file_path)
 
                 prev_content = get_git_file_content(git_path)
                 if prev_content:

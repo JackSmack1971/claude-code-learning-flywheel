@@ -261,3 +261,103 @@ jobs:
           path: |
             .claude/skills/**/*.md
           retention-days: 30
+
+  verify-skills:
+    name: Execute Skill Verification Tests (Proof of Correctness)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run skill verification tests
+        id: verify
+        run: |
+          python scripts/verify_skills.py --report verification-report.json --verbose
+        continue-on-error: true
+
+      - name: Upload verification report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-report
+          path: verification-report.json
+          retention-days: 30
+
+      - name: Comment verification report on PR
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            try {
+              const report = JSON.parse(fs.readFileSync('verification-report.json', 'utf8'));
+              const summary = report.summary;
+
+              let comment = `### 🧪 Skill Verification Report\n\n`;
+
+              // Summary table
+              comment += `| Metric | Count |\n`;
+              comment += `|--------|-------|\n`;
+              comment += `| Total Skills | ${summary.total_skills} |\n`;
+              comment += `| ✅ Verified | ${summary.verified} |\n`;
+              comment += `| ❌ Failed | ${summary.failed} |\n`;
+              comment += `| ⚠️ No Verification | ${summary.no_verification} |\n`;
+
+              // Calculate rates
+              const verificationCoverage = summary.total_skills > 0
+                ? ((summary.verified + summary.failed) / summary.total_skills * 100).toFixed(1)
+                : 0;
+              const successRate = summary.total_skills > 0
+                ? (summary.verified / summary.total_skills * 100).toFixed(1)
+                : 0;
+
+              comment += `\n**Verification Coverage:** ${verificationCoverage}%\n`;
+              comment += `**Success Rate:** ${successRate}%\n\n`;
+
+              // Show failed skills
+              if (summary.failed > 0) {
+                comment += `\n#### ❌ Failed Verifications\n\n`;
+                report.skills.filter(s => s.test_passed === false).forEach(skill => {
+                  comment += `- **${skill.name}**: ${skill.error ? skill.error.substring(0, 100) : 'Test failed'}...\n`;
+                });
+                comment += `\n**Action Required:** Fix failing verifications before merging.\n`;
+              }
+
+              // Show skills without verification
+              if (summary.no_verification > 0) {
+                comment += `\n#### ⚠️ Skills Without Verification\n\n`;
+                report.skills.filter(s => !s.has_verification).forEach(skill => {
+                  comment += `- ${skill.name}\n`;
+                });
+                comment += `\n**Recommendation:** Add verification tests to prevent Context Rot.\n`;
+              }
+
+              // Success message
+              if (summary.failed === 0 && summary.verified > 0) {
+                comment += `\n✅ **All skill verifications passed!** Your skills are proven to work.\n`;
+              }
+
+              comment += `\n---\n*Verification tests prove skills work through executable code, preventing "Context Rot".*`;
+
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment
+              });
+            } catch (e) {
+              console.log('Could not read verification report:', e.message);
+            }
+
+      - name: Fail if verifications failed
+        if: steps.verify.outcome == 'failure'
+        run: |
+          echo "❌ Skill verification tests failed"
+          exit 1
