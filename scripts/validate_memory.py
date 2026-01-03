@@ -27,6 +27,7 @@ from datetime import datetime, timedelta
 
 # Import robust YAML parser
 from yaml_parser import extract_frontmatter
+from skill_checkers import MetadataChecker, ContentChecker, BudgetChecker
 
 
 # Governance Rules
@@ -179,6 +180,17 @@ def validate_skill_file(file_path: Path) -> ValidationResult:
     rel_path = safe_relative_path(file_path)
     result = ValidationResult(str(rel_path))
 
+    # Configuration for checkers
+    config = {
+        'valid_name_pattern': VALID_NAME_PATTERN,
+        'min_description_length': MIN_DESCRIPTION_LENGTH,
+        'required_description_phrases': REQUIRED_DESCRIPTION_PHRASES,
+        'required_sections': REQUIRED_SECTIONS,
+        'max_skill_lines': MAX_SKILL_LINES,
+        'recommended_skill_lines': RECOMMENDED_SKILL_LINES,
+        'deterministic_logic_threshold': DETERMINISTIC_LOGIC_THRESHOLD,
+    }
+
     # Read file
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
@@ -200,46 +212,14 @@ def validate_skill_file(file_path: Path) -> ValidationResult:
         result.add_error("Missing or invalid YAML frontmatter (must start with ---)")
         return result
 
-    # 2. Validate required frontmatter fields
-    if 'name' not in metadata:
-        result.add_error("Frontmatter missing required field: 'name'")
-    else:
-        # Validate name format (kebab-case)
-        name = metadata['name']
-        if not VALID_NAME_PATTERN.match(name):
-            result.add_error(f"Invalid name format: '{name}'. Use kebab-case: verb-noun-context")
+    # 2. Run Metadata Validations via modular checker
+    metadata_checker = MetadataChecker(result, config)
+    metadata_checker.check(metadata, file_path)
 
-    if 'description' not in metadata:
-        result.add_error("Frontmatter missing required field: 'description'")
-    else:
-        # Validate description quality
-        desc = metadata['description']
-        if len(desc) < MIN_DESCRIPTION_LENGTH:
-            result.add_warning(
-                f"Description too vague ({len(desc)} chars, min {MIN_DESCRIPTION_LENGTH}). "
-                "Add specific trigger conditions."
-            )
-
-        # Check for trigger phrase
-        has_trigger = any(phrase in desc for phrase in REQUIRED_DESCRIPTION_PHRASES)
-        if not has_trigger:
-            result.add_warning(
-                "Description should include 'Use when' to define trigger conditions"
-            )
-
-    if 'version' not in metadata:
-        result.add_warning("Frontmatter missing recommended field: 'version'")
-    else:
-        # Validate semantic versioning and enforce version bumps
+    # 3. Handle specific versioning and git logic (kept here for coordination)
+    if 'version' in metadata:
         current_version = metadata['version']
-
-        # Check if version format is valid
-        if not parse_semver(current_version):
-            result.add_warning(
-                f"Invalid version format: '{current_version}'. Use semantic versioning (e.g., '1.2.3')"
-            )
-        else:
-            # Check if Negative Knowledge changed without version bump
+        if parse_semver(current_version):
             try:
                 # Get relative path for git (safely)
                 git_path = safe_relative_path(file_path)
@@ -264,131 +244,24 @@ def validate_skill_file(file_path: Path) -> ValidationResult:
                                     f"but version not bumped (still {current_version}). "
                                     f"Bump version to signal knowledge update."
                                 )
-                            elif version_comparison == 'invalid':
-                                result.add_warning(
-                                    "Version appears to have changed, but format is invalid for comparison"
-                                )
-                            else:
+                            elif version_comparison == 'bumped':
                                 # Version was bumped - good!
                                 result.add_info(
                                     f"✓ Version bumped {prev_version} → {current_version} (Negative Knowledge updated)"
                                 )
-            except Exception as e:
-                # Don't fail validation if git check fails (e.g., new file, not in git)
+            except Exception:
+                # Don't fail validation if git check fails
                 pass
 
-    if 'last_verified' not in metadata:
-        result.add_warning("Frontmatter missing recommended field: 'last_verified' (tracks skill freshness)")
-    else:
-        # Validate date format (YYYY-MM-DD)
-        last_verified = metadata['last_verified']
-        date_pattern = re.compile(r'^\d{4}-\d{2}-\d{2}$')
-        if not date_pattern.match(str(last_verified)):
-            result.add_warning(
-                f"Invalid 'last_verified' format: '{last_verified}'. Use YYYY-MM-DD format"
-            )
-        else:
-            # Check for staleness (Context Rot)
-            try:
-                verified_date = datetime.strptime(str(last_verified), '%Y-%m-%d')
-                days_since_verified = (datetime.now() - verified_date).days
-                if days_since_verified > SKILL_FRESHNESS_DAYS:
-                    result.add_warning(
-                        f"⏰ STALE: Last verified {days_since_verified} days ago (>{SKILL_FRESHNESS_DAYS} days). "
-                        "Verify skill still works or archive it to prevent 'Context Rot'"
-                    )
-            except ValueError:
-                pass  # Date format already checked above
+    # 4. Run Content and Structural Validations via modular checker
+    content_checker = ContentChecker(result, config)
+    content_checker.check(body)
 
-    if 'author' not in metadata:
-        result.add_warning("Frontmatter missing recommended field: 'author' (for ownership tracking)")
+    # 5. Run Budget and Anti-pattern Validations via modular checker
+    budget_checker = BudgetChecker(result, config)
+    budget_checker.check(body)
 
-    if 'tags' in metadata:
-        tags = metadata['tags']
-        if isinstance(tags, list) and len(tags) == 0:
-            result.add_info("Consider adding tags for better skill organization and discovery")
-
-    # Check for enterprise skills (in plugins/company-* directories) - allowed-tools is MANDATORY
-    is_enterprise_skill = 'plugins/company-' in str(file_path) or 'plugins/enterprise-' in str(file_path)
-
-    if 'allowed-tools' in metadata:
-        allowed_tools = metadata['allowed-tools']
-        if isinstance(allowed_tools, list) and len(allowed_tools) == 0:
-            if is_enterprise_skill:
-                result.add_error("Enterprise skills MUST specify 'allowed-tools' for governance and security")
-            else:
-                result.add_info("Consider specifying allowed-tools to restrict skill tool usage")
-    else:
-        if is_enterprise_skill:
-            result.add_error("Enterprise skills MUST include 'allowed-tools' field in frontmatter")
-
-    # 3. Validate Negative Knowledge section
-    has_negative_knowledge = any(
-        section in body for section in REQUIRED_SECTIONS
-    )
-
-    if not has_negative_knowledge:
-        result.add_error(
-            "Missing required section: 'Negative Knowledge' or 'Failed Attempts'. "
-            "Document what FAILED, not just what worked."
-        )
-    else:
-        # Check if it actually has content (not just the header)
-        neg_knowledge_match = re.search(
-            r'#+\s*(Negative Knowledge|Failed Attempts).*?\n(.*?)(?=\n#+|\Z)',
-            body,
-            re.DOTALL | re.IGNORECASE
-        )
-        if neg_knowledge_match:
-            section_content = neg_knowledge_match.group(2).strip()
-            # Check if it has a table or substantial content
-            if len(section_content) < 100 and '|' not in section_content:
-                result.add_warning(
-                    "Negative Knowledge section exists but appears empty or minimal. "
-                    "Add at least one documented failure."
-                )
-
-    # 4. Validate context budget (file size)
-    line_count = len(body.split('\n'))
-    if line_count > MAX_SKILL_LINES:
-        result.add_error(
-            f"❌ FAIL: Exceeds token budget: {line_count} lines (max {MAX_SKILL_LINES}). "
-            f"Skills > {MAX_SKILL_LINES} lines degrade model performance.\n"
-            f"   -> ACTION: Extract logic to a 'Zero-Context Script' in scripts/\n"
-            f"   -> OR: Move detailed documentation to reference.md"
-        )
-    elif line_count > RECOMMENDED_SKILL_LINES:
-        result.add_warning(
-            f"Approaching context limit: {line_count}/{MAX_SKILL_LINES} lines (recommended: {RECOMMENDED_SKILL_LINES}). "
-            "Consider splitting or moving details to reference.md to preserve 'Instruction Budget'"
-        )
-    elif line_count > RECOMMENDED_SKILL_LINES * 0.8:
-        result.add_info(
-            f"Skill size is {line_count} lines (recommended max: {RECOMMENDED_SKILL_LINES}). "
-            "Still within budget, but monitor growth."
-        )
-
-    # 5. Check for deterministic logic that should be in scripts
-    # Detect if/else patterns and list declarations
-    if_else_pattern = re.compile(r'^\s*(if|elif|else|switch|case)\s', re.MULTILINE)
-    list_pattern = re.compile(r'^\s*[-*]\s+\w+:\s*["\']', re.MULTILINE)  # Detect config-like lists
-
-    if_else_matches = if_else_pattern.findall(body)
-    list_matches = list_pattern.findall(body)
-
-    deterministic_lines = len(if_else_matches) + (len(list_matches) // 2)  # Rough estimate
-
-    if deterministic_lines > DETERMINISTIC_LOGIC_THRESHOLD:
-        result.add_warning(
-            f"Detected {deterministic_lines} lines of deterministic logic (if/else, hardcoded lists). "
-            "Move complex logic to scripts/ for zero-context execution"
-        )
-
-    # 6. Check for common anti-patterns
-    if 'TODO' in body or 'FIXME' in body:
-        result.add_warning("Contains TODO/FIXME markers - complete before committing")
-
-    # 7. Validate structure (should have numbered sections)
+    # 6. Validate structure (should have numbered sections)
     section_pattern = re.compile(r'^#+\s+\d+\.\s+', re.MULTILINE)
     sections = section_pattern.findall(body)
     if len(sections) < 3:
