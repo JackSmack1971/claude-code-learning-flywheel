@@ -45,29 +45,68 @@ SKILL_FRESHNESS_DAYS = 180  # Skills not verified in 6 months are flagged as sta
 
 
 class ValidationResult:
-    """Container for validation results."""
+    """Container for validation results.
+    
+    Collects errors, warnings, and informational messages during the
+    validation of a skill file.
+    
+    Attributes:
+        file_path: The path of the file being validated.
+        errors: List of error messages (blocking).
+        warnings: List of warning messages (non-blocking).
+        info: List of informational messages.
+    """
 
     def __init__(self, file_path: str):
+        """Initializes the ValidationResult container.
+        
+        Args:
+            file_path: Path to the validated file.
+        """
         self.file_path = file_path
         self.errors: List[str] = []
         self.warnings: List[str] = []
         self.info: List[str] = []
 
     def add_error(self, message: str):
+        """Adds an error message to the result.
+        
+        Args:
+            message: The error description.
+        """
         self.errors.append(f"❌ {message}")
 
     def add_warning(self, message: str):
+        """Adds a warning message to the result.
+        
+        Args:
+            message: The warning description.
+        """
         self.warnings.append(f"⚠️  {message}")
 
     def add_info(self, message: str):
+        """Adds an informational message to the result.
+        
+        Args:
+            message: The info description.
+        """
         self.info.append(f"ℹ️  {message}")
 
     def is_valid(self, strict: bool = False) -> bool:
+        """Checks if the validation passed.
+        
+        Args:
+            strict: If True, warnings are treated as failures.
+            
+        Returns:
+            bool: True if valid, False otherwise.
+        """
         if strict:
             return len(self.errors) == 0 and len(self.warnings) == 0
         return len(self.errors) == 0
 
     def print_results(self):
+        """Prints the validation results to the console."""
         print(f"\n📄 {self.file_path}")
         for msg in self.errors:
             print(f"  {msg}")
@@ -84,6 +123,13 @@ def safe_relative_path(path: Path, base: Optional[Path] = None) -> Path:
 
     This prevents ValueError when paths don't share a common ancestor
     or when mixing relative and absolute paths.
+    
+    Args:
+        path: Path to make relative.
+        base: Base directory. Defaults to current working directory.
+        
+    Returns:
+        Path: Relative path if possible, otherwise resolved absolute path.
     """
     try:
         # Resolve both paths to absolute
@@ -98,7 +144,15 @@ def safe_relative_path(path: Path, base: Optional[Path] = None) -> Path:
 
 
 def get_git_file_content(file_path: Path, ref: str = 'HEAD') -> Optional[str]:
-    """Get file content from git at a specific ref (commit/branch)."""
+    """Get file content from git at a specific ref (commit/branch).
+    
+    Args:
+        file_path: Relative path to the file in the repository.
+        ref: Git reference (branch, tag, or commit hash). Defaults to 'HEAD'.
+        
+    Returns:
+        Optional[str]: File content if successful, None otherwise.
+    """
     try:
         # Check if we're in a git repo
         result = subprocess.run(
@@ -127,7 +181,16 @@ def get_git_file_content(file_path: Path, ref: str = 'HEAD') -> Optional[str]:
 
 
 def parse_semver(version: str) -> Optional[Tuple[int, int, int]]:
-    """Parse semantic version string (e.g., '1.2.3') into tuple (major, minor, patch)."""
+    """Parse semantic version string into a numeric tuple.
+    
+    Supports versions like '1.2.3' or 'v1.2.3'.
+    
+    Args:
+        version: Semantic version string.
+        
+    Returns:
+        Optional[Tuple[int, int, int]]: (major, minor, patch) if valid, None otherwise.
+    """
     try:
         # Handle version strings like "1.0.0" or "v1.0.0"
         version = version.strip().lower().lstrip('v')
@@ -145,10 +208,12 @@ def parse_semver(version: str) -> Optional[Tuple[int, int, int]]:
 def compare_versions(old_ver: str, new_ver: str) -> str:
     """Compare two semantic versions.
 
+    Args:
+        old_ver: Previous version string.
+        new_ver: Current version string.
+
     Returns:
-        'bumped' if version increased
-        'same' if versions are identical
-        'invalid' if either version is malformed
+        str: 'bumped' if version increased, 'same' if identical, 'invalid' if malformed.
     """
     old = parse_semver(old_ver)
     new = parse_semver(new_ver)
@@ -165,7 +230,14 @@ def compare_versions(old_ver: str, new_ver: str) -> str:
 
 
 def extract_negative_knowledge(body: str) -> str:
-    """Extract the Negative Knowledge section from skill body."""
+    """Extract the Negative Knowledge section from skill body.
+    
+    Args:
+        body: The Markdown content of the skill file.
+        
+    Returns:
+        str: Content of the 'Negative Knowledge' or 'Failed Attempts' section.
+    """
     # Match "Negative Knowledge" or "Failed Attempts" section
     pattern = r'#+\s*(Negative Knowledge|Failed Attempts).*?\n(.*?)(?=\n#+|\Z)'
     match = re.search(pattern, body, re.DOTALL | re.IGNORECASE)
@@ -175,7 +247,17 @@ def extract_negative_knowledge(body: str) -> str:
 
 
 def validate_skill_file(file_path: Path) -> ValidationResult:
-    """Validate a single SKILL.md file."""
+    """Validate a single SKILL.md file.
+    
+    Orchestrates the validation process by checking frontmatter, 
+    Negative Knowledge, and context budget using specialized checkers.
+    
+    Args:
+        file_path: Path to the skill file to validate.
+        
+    Returns:
+        ValidationResult: The result of all validation checks.
+    """
     # Handle both absolute and relative paths safely
     rel_path = safe_relative_path(file_path)
     result = ValidationResult(str(rel_path))
@@ -273,7 +355,14 @@ def validate_skill_file(file_path: Path) -> ValidationResult:
 
 
 def find_all_skills(base_path: Path = Path('.claude/skills')) -> List[Path]:
-    """Find all SKILL.md files in the repository."""
+    """Find all SKILL.md files in the repository.
+    
+    Args:
+        base_path: The directory to start searching for skill files. Defaults to '.claude/skills'.
+        
+    Returns:
+        List[Path]: A list of paths to all discovered SKILL.md files.
+    """
     skills = []
 
     if not base_path.exists():
@@ -287,7 +376,14 @@ def find_all_skills(base_path: Path = Path('.claude/skills')) -> List[Path]:
 
 
 def print_statistics(results: List[ValidationResult]):
-    """Print summary statistics."""
+    """Print summary statistics for a validation run.
+    
+    Calculates success rate, average skill size, and context efficiency
+    metrics across all validated skill files.
+    
+    Args:
+        results: A list of ValidationResult objects.
+    """
     total = len(results)
     valid = sum(1 for r in results if r.is_valid())
     with_warnings = sum(1 for r in results if r.warnings and not r.errors)

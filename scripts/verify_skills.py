@@ -38,9 +38,31 @@ VERIFICATION_TIMEOUT = 60  # seconds per test
 
 
 class VerificationResult:
-    """Container for skill verification results."""
+    """Container for skill verification results.
+    
+    Stores the outcome of an executable verification test, including output,
+    execution time, and whether the test was successful.
+    
+    Attributes:
+        skill_path: Path to the validated skill file.
+        skill_name: Name of the skill.
+        has_verification: Whether a verification test is defined for this skill.
+        test_command: The command executed for verification.
+        test_script: The test script file path.
+        test_passed: True if the test passed, False if it failed, None if no test.
+        test_output: Combined stdout and stderr from the test run.
+        test_error: Error message if the test failed.
+        last_verified: The date of the last successful verification.
+        execution_time: Duration of the test run in seconds.
+    """
 
     def __init__(self, skill_path: Path, skill_name: str):
+        """Initializes the verification result container.
+        
+        Args:
+            skill_path: Absolute or relative path to the skill.
+            skill_name: Display name for the skill.
+        """
         self.skill_path = skill_path
         self.skill_name = skill_name
         self.has_verification = False
@@ -58,18 +80,29 @@ class VerificationResult:
         self.test_passed = None
 
     def mark_test_passed(self, output: str, execution_time: float):
-        """Mark the verification test as passed."""
+        """Mark the verification test as passed.
+        
+        Args:
+            output: The combined output string from the test.
+            execution_time: Time taken in seconds.
+        """
         self.test_passed = True
         self.test_output = output
         self.execution_time = execution_time
 
     def mark_test_failed(self, error: str, execution_time: float):
-        """Mark the verification test as failed."""
+        """Mark the verification test as failed.
+        
+        Args:
+            error: The error message or output captured.
+            execution_time: Time taken in seconds.
+        """
         self.test_passed = False
         self.test_error = error
         self.execution_time = execution_time
 
     def __str__(self):
+        """Returns a formatted status string for console output."""
         status_icon = "✅" if self.test_passed else "❌" if self.test_passed is False else "⚠️"
         status = "PASS" if self.test_passed else "FAIL" if self.test_passed is False else "NO-TEST"
         return f"{status_icon} [{status}] {self.skill_name} ({self.execution_time:.2f}s)"
@@ -78,8 +111,12 @@ class VerificationResult:
 def safe_relative_path(path: Path, base: Optional[Path] = None) -> str:
     """Safely compute relative path, falling back to absolute if needed.
 
-    This prevents ValueError when paths don't share a common ancestor
-    or when mixing relative and absolute paths.
+    Args:
+        path: Path to convert to relative.
+        base: Base directory. Defaults to current working directory.
+        
+    Returns:
+        str: Relative path if possible, otherwise absolute path.
     """
     try:
         # Resolve both paths to absolute
@@ -96,7 +133,12 @@ def safe_relative_path(path: Path, base: Optional[Path] = None) -> str:
 def update_last_verified_in_frontmatter(file_path: Path, new_date: str) -> bool:
     """Update the last_verified field in the skill's frontmatter.
 
-    This provides automatic proof-of-correctness updates when tests pass.
+    Args:
+        file_path: Path to the skill file to update.
+        new_date: ISO-formatted date string (e.g., "2026-01-01").
+
+    Returns:
+        bool: True if successful, False otherwise.
     """
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
@@ -150,7 +192,11 @@ def update_last_verified_in_frontmatter(file_path: Path, new_date: str) -> bool:
 
 
 def find_all_skills() -> List[Path]:
-    """Find all SKILL.md files in the repository."""
+    """Find all SKILL.md files in the repository.
+    
+    Returns:
+        List[Path]: A list of paths to all discovered SKILL.md files.
+    """
     skills = []
 
     if not SKILLS_BASE_PATH.exists():
@@ -166,8 +212,15 @@ def find_all_skills() -> List[Path]:
 def load_skill_verification_config(skill_path: Path) -> Tuple[str, Optional[str], Optional[str], Optional[str]]:
     """Load verification configuration from skill frontmatter.
 
+    Args:
+        skill_path: Path to the skill file.
+
     Returns:
-        (skill_name, test_script, test_command, last_verified)
+        Tuple[str, Optional[str], Optional[str], Optional[str]]: A tuple containing:
+            - skill_name: The name of the skill.
+            - test_script: Path to the test script (if defined).
+            - test_command: The raw test command (if defined).
+            - last_verified: The last verification date.
     """
     try:
         with open(skill_path, 'r', encoding='utf-8') as f:
@@ -197,8 +250,15 @@ def load_skill_verification_config(skill_path: Path) -> Tuple[str, Optional[str]
 def run_verification_test(test_command: str, timeout: int = VERIFICATION_TIMEOUT) -> Tuple[bool, str, float]:
     """Run a verification test command.
 
+    Args:
+        test_command: The shell command to execute.
+        timeout: Maximum execution time in seconds. Defaults to 60.
+
     Returns:
-        (success, output, execution_time)
+        Tuple[bool, str, float]: A tuple of (success, output, execution_time).
+            success: True if exit code is 0.
+            output: Combined stdout and stderr.
+            execution_time: Duration of the test in seconds.
     """
     import time
 
@@ -231,7 +291,15 @@ def run_verification_test(test_command: str, timeout: int = VERIFICATION_TIMEOUT
 
 
 def verify_skill(skill_path: Path, update_dates: bool = False) -> VerificationResult:
-    """Verify a single skill by running its verification test."""
+    """Verify a single skill by running its verification test.
+    
+    Args:
+        skill_path: Path to the skill file.
+        update_dates: If True, update 'last_verified' in frontmatter on success.
+        
+    Returns:
+        VerificationResult: The outcome of the verification.
+    """
     skill_name, test_script, test_command, last_verified = load_skill_verification_config(skill_path)
 
     result = VerificationResult(skill_path, skill_name)
@@ -279,7 +347,15 @@ def verify_skill(skill_path: Path, update_dates: bool = False) -> VerificationRe
 
 
 def generate_verification_report(results: List[VerificationResult], output_path: Optional[Path] = None):
-    """Generate a verification report in JSON format."""
+    """Generate a verification report in JSON format.
+    
+    Args:
+        results: List of verification results.
+        output_path: Path to save the JSON report.
+        
+    Returns:
+        Dict: The report data.
+    """
     report = {
         "timestamp": datetime.now().isoformat(),
         "summary": {
@@ -320,7 +396,12 @@ def generate_verification_report(results: List[VerificationResult], output_path:
 
 
 def print_results(results: List[VerificationResult], verbose: bool = False):
-    """Print verification results in human-readable format."""
+    """Print verification results in human-readable format.
+    
+    Args:
+        results: List of verification results.
+        verbose: If True, print detailed output for each test.
+    """
     print("\n" + "=" * 80)
     print("🧪 SKILL VERIFICATION RESULTS")
     print("=" * 80)

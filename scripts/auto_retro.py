@@ -43,7 +43,14 @@ from yaml_parser import extract_frontmatter
 
 
 def parse_semver(version: str) -> List[int]:
-    """Parse semver string into [major, minor, patch]."""
+    """Parse semantic version string into a numeric list.
+    
+    Args:
+        version: Version string (e.g., "1.2.3" or "v1.2.3").
+        
+    Returns:
+        List[int]: [major, minor, patch]. Defaults to [1, 0, 0] on failure.
+    """
     try:
         # Handle both "v1.2.3" and "1.2.3" formats
         clean = version.lstrip('v').split('.')
@@ -57,11 +64,11 @@ def bump_version(version: str, bump_type: str = 'patch') -> str:
     """Bump semantic version.
 
     Args:
-        version: Current version string (e.g., "1.2.3" or "v1.2.3")
-        bump_type: Type of bump ('major', 'minor', 'patch')
+        version: Current version string (e.g., "1.2.3" or "v1.2.3").
+        bump_type: Type of bump ('major', 'minor', 'patch'). Defaults to 'patch'.
 
     Returns:
-        New version string (without 'v' prefix)
+        str: New version string (without 'v' prefix).
     """
     major, minor, patch = parse_semver(version)
 
@@ -79,10 +86,15 @@ def bump_version(version: str, bump_type: str = 'patch') -> str:
 
 
 def dump_yaml_frontmatter(metadata: Dict[str, Any]) -> str:
-    """Convert metadata dict to YAML frontmatter string.
+    """Convert metadata dictionary to YAML frontmatter string.
 
-    This is a simple YAML dumper for the subset we use in skills.
-    Handles: strings, numbers, booleans, lists, nested dicts.
+    This is a simplified YAML dumper for the subset of data used in skill metadata.
+    
+    Args:
+        metadata: Dictionary of frontmatter fields.
+        
+    Returns:
+        str: Formatted YAML frontmatter block.
     """
     lines = ['---']
 
@@ -94,7 +106,16 @@ def dump_yaml_frontmatter(metadata: Dict[str, Any]) -> str:
 
 
 def dump_yaml_value(key: str, value: Any, indent: int = 0) -> str:
-    """Dump a single YAML key-value pair with proper indentation."""
+    """Dump a single YAML key-value pair with proper indentation.
+    
+    Args:
+        key: The YAML field name.
+        value: The value to dump (handles strings, lists, dicts, etc.).
+        indent: Indentation level. Defaults to 0.
+        
+    Returns:
+        str: Formatted YAML line(s).
+    """
     prefix = '  ' * indent
 
     if value is None or value == '':
@@ -146,10 +167,13 @@ def dump_yaml_value(key: str, value: Any, indent: int = 0) -> str:
 def locate_negative_knowledge_table(body: str) -> Tuple[Optional[int], Optional[int]]:
     """Find the insertion point for the Negative Knowledge table.
 
+    Args:
+        body: The Markdown content of the skill file.
+        
     Returns:
-        Tuple of (insert_line_index, end_line_index)
-        insert_line_index: Where to insert new rows (after table header)
-        end_line_index: Last line of table (for future use)
+        Tuple[Optional[int], Optional[int]]: A tuple of (insert_line_index, end_line_index).
+            insert_line_index: Where to insert new rows (after table header).
+            end_line_index: Last line of table (currently unused).
     """
     lines = body.split('\n')
 
@@ -170,10 +194,10 @@ def format_table_row(entry: Dict[str, str]) -> str:
     """Format a failure entry as a markdown table row.
 
     Args:
-        entry: Dict with keys: attempt, failure, cost, fix
+        entry: Dictionary with keys: 'attempt', 'failure', 'cost', 'fix'.
 
     Returns:
-        Formatted markdown table row
+        str: Formatted markdown table row.
     """
     # Escape pipe characters in cell content
     attempt = entry.get('attempt', 'N/A').replace('|', '\\|')
@@ -185,7 +209,14 @@ def format_table_row(entry: Dict[str, str]) -> str:
 
 
 def create_negative_knowledge_section(entries: List[Dict[str, str]]) -> str:
-    """Create a complete Negative Knowledge section from scratch."""
+    """Create a complete Negative Knowledge section from scratch.
+    
+    Args:
+        entries: List of failure entry dictionaries.
+        
+    Returns:
+        str: A complete Markdown section including header and table.
+    """
     lines = [
         "",
         "## Negative Knowledge (Auto-Generated)",
@@ -203,12 +234,15 @@ def create_negative_knowledge_section(entries: List[Dict[str, str]]) -> str:
 
 def merge_retrospective(retro_data: Dict) -> bool:
     """Merge retrospective data into target skill.
+    
+    Performs an atomic update by backing up the skill file, bumping the 
+    version, and injecting new failure rows into the Negative Knowledge table.
 
     Args:
-        retro_data: JSON structure with target_skill and negative_knowledge
+        retro_data: JSON structure with 'target_skill' and 'negative_knowledge'.
 
     Returns:
-        True on success, False on failure
+        bool: True on success, False on failure.
     """
     # Validate input
     skill_path = Path(retro_data.get('target_skill', ''))

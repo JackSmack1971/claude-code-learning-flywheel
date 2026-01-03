@@ -28,17 +28,16 @@ def extract_frontmatter(content: str) -> Tuple[Dict, str]:
     """Extract YAML frontmatter and body from markdown content.
 
     Args:
-        content: Full markdown file content
+        content: Full markdown file content.
 
     Returns:
-        Tuple of (metadata_dict, body_text)
+        Tuple[Dict, str]: A tuple of (metadata_dict, body_text).
+            metadata_dict: Dictionary parsed from YAML frontmatter.
+            body_text: The markdown content after the frontmatter.
 
-    Robust parsing that handles:
-    - Nested objects (verification: {test_script, command})
-    - Block scalars (| and > for multiline)
-    - Arrays (both [inline] and - item style)
-    - Quoted strings with colons/special chars
-    - Edge cases (comments, empty values, trailing colons)
+    Note:
+        Robust parsing handles nested objects (verification), block scalars (|),
+        arrays (both styles), and quoted strings with special characters.
     """
     if not content.startswith('---'):
         return {}, content
@@ -68,14 +67,17 @@ def parse_yaml_subset(yaml_text: str) -> Dict:
 
     Supported YAML features:
     - key: value (simple pairs)
-    - key: [array, items]  (inline arrays)
-    - key:  (followed by indented nested object or array)
-    - "quoted: strings"  (preserve colons inside quotes)
+    - key: [array, items] (inline arrays)
+    - key: (followed by indented nested object or array)
+    - "quoted: strings" (preserve colons inside quotes)
     - # comments
     - null, ~, "" (empty values)
 
+    Args:
+        yaml_text: The YAML string to parse.
+
     Returns:
-        Dictionary with parsed metadata
+        Dict: Dictionary with parsed metadata.
     """
     lines = yaml_text.split('\n')
     metadata = {}
@@ -114,11 +116,14 @@ def parse_key_value_pair(lines: List[str], start_idx: int) -> Tuple[str, Any, in
     """Parse a key:value pair, handling nested objects and arrays.
 
     Args:
-        lines: All YAML lines
-        start_idx: Index of line containing the key
+        lines: All YAML lines as a list of strings.
+        start_idx: Index of the line containing the key.
 
     Returns:
-        Tuple of (key, value, lines_consumed)
+        Tuple[str, Any, int]: A tuple of (key, value, lines_consumed).
+            key: The parsed field name.
+            value: The parsed value (string, list, or dict).
+            lines_consumed: Number of lines processed from the input list.
     """
     line = lines[start_idx]
 
@@ -164,13 +169,17 @@ def parse_key_value_pair(lines: List[str], start_idx: int) -> Tuple[str, Any, in
 def parse_inline_value(value_str: str) -> Any:
     """Parse an inline YAML value.
 
-    Handles:
-    - Quoted strings: "value" or 'value'
-    - Inline arrays: [item1, item2]
-    - Booleans: true, false, yes, no
-    - Numbers: 42, 3.14
-    - Null: null, ~
-    - Plain strings
+    Args:
+        value_str: The string fragment after the colon.
+
+    Returns:
+        Any: The parsed value. Handles:
+            - Quoted strings: "value" or 'value'
+            - Inline arrays: [item1, item2]
+            - Booleans: true, false, yes, no
+            - Numbers: 42, 3.14
+            - Null: null, ~
+            - Plain strings (comments stripped)
     """
     value_str = value_str.strip()
 
@@ -215,10 +224,11 @@ def parse_inline_value(value_str: str) -> Any:
 def parse_inline_array(array_str: str) -> List:
     """Parse inline array syntax: [item1, item2, "item3"].
 
-    Handles:
-    - Empty arrays: []
-    - Quoted items: ["item1", "item2"]
-    - Mixed: [item1, "item 2", item3]
+    Args:
+        array_str: The string fragment containing brackets.
+
+    Returns:
+        List: A list of parsed items. Handles empty arrays, quotes, and commas.
     """
     # Remove brackets
     array_content = array_str[1:-1].strip()
@@ -267,12 +277,12 @@ def parse_nested_content(lines: List[str], start_idx: int) -> Tuple[Optional[Any
     """Parse nested content (object or array) following a key.
 
     Args:
-        lines: All YAML lines
-        start_idx: Index of first potential nested line
+        lines: All YAML lines.
+        start_idx: Index of the first potential nested line.
 
     Returns:
-        Tuple of (parsed_value, lines_consumed)
-        Returns (None, 0) if no nested content found
+        Tuple[Optional[Any], int]: A tuple of (parsed_value, lines_consumed).
+            Returns (None, 0) if no nested content is discovered.
     """
     if start_idx >= len(lines):
         return None, 0
@@ -313,10 +323,13 @@ def parse_nested_content(lines: List[str], start_idx: int) -> Tuple[Optional[Any
 def parse_multiline_array(lines: List[str], start_idx: int, base_indent: int) -> Tuple[List, int]:
     """Parse multiline array in '- item' format.
 
-    Example:
-        tags:
-          - deployment
-          - production
+    Args:
+        lines: All YAML lines.
+        start_idx: Index to start parsing from.
+        base_indent: Expected indentation level for the array items.
+
+    Returns:
+        Tuple[List, int]: A tuple of (items_list, lines_consumed).
     """
     items = []
     i = start_idx
@@ -368,10 +381,13 @@ def parse_multiline_array(lines: List[str], start_idx: int, base_indent: int) ->
 def parse_nested_object(lines: List[str], start_idx: int, base_indent: int) -> Tuple[Dict, int]:
     """Parse nested object via indentation.
 
-    Example:
-        verification:
-          test_script: "tests/foo.py"
-          command: "python3 tests/foo.py"
+    Args:
+        lines: All YAML lines.
+        start_idx: Index to start parsing from.
+        base_indent: Expected indentation level for the object keys.
+
+    Returns:
+        Tuple[Dict, int]: A tuple of (parsed_dict, lines_consumed).
     """
     obj = {}
     i = start_idx
@@ -417,12 +433,12 @@ def parse_block_scalar(lines: List[str], start_idx: int, scalar_type: str) -> Tu
     """Parse block scalar (| or >) for multiline strings.
 
     Args:
-        lines: All YAML lines
-        start_idx: Index of first line of block content
-        scalar_type: '|' (literal) or '>' (folded)
+        lines: All YAML lines.
+        start_idx: Index of first line of block content.
+        scalar_type: '|' (literal) or '>' (folded).
 
     Returns:
-        Tuple of (concatenated_string, lines_consumed)
+        Tuple[str, int]: A tuple of (concatenated_string, lines_consumed).
     """
     if start_idx >= len(lines):
         return '', 0
