@@ -4,9 +4,10 @@ Validate all SKILL.md files in the repository against governance rules.
 
 This script enforces the Learning Flywheel's core principles:
 1. Negative Knowledge must be documented
-2. Context must be kept within budget
-3. Skills must have specific trigger descriptions
-4. Format must follow the standard template
+2. Versioning must be bumped when knowledge changes
+3. Context must be kept within budget
+4. Skills must have specific trigger descriptions
+5. Format must follow the standard template
 
 Usage:
     python scripts/validate_memory.py                    # Validate all skills
